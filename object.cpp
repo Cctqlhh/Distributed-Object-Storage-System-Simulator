@@ -13,25 +13,56 @@ Object::Object(int id, int size)
     }
 }
 // replica_idx 副本id
+// bool Object::write_replica(int replica_idx, Disk& disk) {
+//     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查
+//     int current_write_point = 0;
+//     int disk_capacity = disk.get_capacity();
+    
+//     for (int i = 1; i <= disk_capacity; i++) {
+//         if (disk.is_free(i)) {
+//             if (disk.write(i, object_id)) {
+//                 unit_pos[replica_idx][++current_write_point] = i;
+//                 if (current_write_point == size) {
+//                     replica_disks[replica_idx] = disk.get_id();
+//                     return true;
+//                 }
+//             }
+//         }
+//     }
+    
+//     // 若写入失败是否应该保留已写入的部分内容
+//     assert(current_write_point == size);
+//     return false;
+// }
 bool Object::write_replica(int replica_idx, Disk& disk) {
-    assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查
+    assert(replica_idx > 0 && replica_idx <= REP_NUM);
     int current_write_point = 0;
     int disk_capacity = disk.get_capacity();
     
-    for (int i = 1; i <= disk_capacity; i++) {
+    // 预分配空间，避免多次重新分配
+    std::vector<int> positions;
+    positions.reserve(size);
+    
+    // 先找到所有空闲位置，减少磁盘操作次数
+    for (int i = 1; i <= disk_capacity && current_write_point < size; i++) {
         if (disk.is_free(i)) {
-            if (disk.write(i, object_id)) {
-                unit_pos[replica_idx][++current_write_point] = i;
-                if (current_write_point == size) {
-                    replica_disks[replica_idx] = disk.get_id();
-                    return true;
-                }
-            }
+            positions.push_back(i);
+            current_write_point++;
         }
     }
     
-    // 若写入失败是否应该保留已写入的部分内容
-    assert(current_write_point == size);
+    // 如果找到足够的空间，一次性写入
+    if (current_write_point == size) {
+        current_write_point = 0;
+        for (int pos : positions) {
+            disk.write(pos, object_id);
+            unit_pos[replica_idx][++current_write_point] = pos;
+        }
+        replica_disks[replica_idx] = disk.get_id();
+        return true;
+    }
+    
+    assert(current_write_point == size);  // 保持与原版相同的行为
     return false;
 }
 

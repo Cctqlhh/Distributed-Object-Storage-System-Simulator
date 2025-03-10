@@ -53,17 +53,17 @@ void delete_action()
     int abort_num = 0;
     static int _id[MAX_OBJECT_NUM];
 
-    scanf("%d", &n_delete);
+    scanf("%d", &n_delete); // 要删除的对象个数
     for (int i = 1; i <= n_delete; i++) {
-        scanf("%d", &_id[i]);
+        scanf("%d", &_id[i]); // 要删除的对象id
     }
 
     for (int i = 1; i <= n_delete; i++) {
         int id = _id[i];
         int current_id = object[id].last_request_point;
-        while (current_id != 0) {
+        while (current_id != 0) { // 遍历请求链表
             if (request[current_id].is_done == false) {
-                abort_num++;
+                abort_num++; // 统计未完成的请求个数
             }
             current_id = request[current_id].prev_id;
         }
@@ -92,29 +92,29 @@ void do_object_write(int* object_unit, int* disk_unit, int size, int object_id)
 {
     int current_write_point = 0;
     for (int i = 1; i <= V; i++) {
-        if (disk_unit[i] == 0) {
-            disk_unit[i] = object_id;
-            object_unit[++current_write_point] = i;
-            if (current_write_point == size) {
+        if (disk_unit[i] == 0) { // 找到硬盘空闲块
+            disk_unit[i] = object_id; // 记录硬盘空闲块保存的对象id
+            object_unit[++current_write_point] = i; // 记录当前对象块保存的存储单元id
+            if (current_write_point == size) { // 对象块全部存储完成 break
                 break;
             }
         }
     }
 
-    assert(current_write_point == size);
+    assert(current_write_point == size); // 断言对象块全部存储完成，否则报错
 }
 
 void write_action()
 {
     int n_write;
-    scanf("%d", &n_write);
-    for (int i = 1; i <= n_write; i++) {
+    scanf("%d", &n_write); // 要写的对象个数
+    for (int i = 1; i <= n_write; i++) { // 要写的对象
         int id, size;
-        scanf("%d%d%*d", &id, &size);
-        object[id].last_request_point = 0;
-        for (int j = 1; j <= REP_NUM; j++) {
-            object[id].replica[j] = (id + j) % N + 1;
-            object[id].unit[j] = static_cast<int*>(malloc(sizeof(int) * (size + 1)));
+        scanf("%d%d%*d", &id, &size); // 对象id,对象大小,对象标签(未保存)
+        object[id].last_request_point = 0; // 初始化请求链表为空
+        for (int j = 1; j <= REP_NUM; j++) { // 对象的第j个副本
+            object[id].replica[j] = (id + j) % N + 1; // 计算第j个副本分配到硬盘编号(简单分散)
+            object[id].unit[j] = static_cast<int*>(malloc(sizeof(int) * (size + 1))); // 计算第j个副本的对象块
             object[id].size = size;
             object[id].is_delete = false;
             do_object_write(object[id].unit[j], disk[object[id].replica[j]], size, id);
@@ -136,13 +136,13 @@ void write_action()
 void read_action()
 {
     int n_read;
-    int request_id, object_id;
-    scanf("%d", &n_read);
+    int request_id, object_id; 
+    scanf("%d", &n_read); // 要读的请求个数，读取几个对象
     for (int i = 1; i <= n_read; i++) {
-        scanf("%d%d", &request_id, &object_id);
-        request[request_id].object_id = object_id;
-        request[request_id].prev_id = object[object_id].last_request_point;
-        object[object_id].last_request_point = request_id;
+        scanf("%d%d", &request_id, &object_id); // 请求id,对象id
+        request[request_id].object_id = object_id; // 记录i请求信息，目标对象id
+        request[request_id].prev_id = object[object_id].last_request_point; // 记录i请求信息，上一个请求id
+        object[object_id].last_request_point = request_id; // 更新对象最后一次读取的请求id
         request[request_id].is_done = false;
     }
 
@@ -151,37 +151,37 @@ void read_action()
     if (!current_request && n_read > 0) {
         current_request = request_id;
     }
-    if (!current_request) {
-        for (int i = 1; i <= N; i++) {
+    if (!current_request) { // 没有处理请求
+        for (int i = 1; i <= N; i++) { // 遍历所有硬盘，输出# 不操作
             printf("#\n");
         }
-        printf("0\n");
+        printf("0\n"); // 没有处理请求，读取完成0个请求
     } else {
         current_phase++;
-        object_id = request[current_request].object_id;
+        object_id = request[current_request].object_id; // 请求读取的对象id
         for (int i = 1; i <= N; i++) {
-            if (i == object[object_id].replica[1]) {
-                if (current_phase % 2 == 1) {
+            if (i == object[object_id].replica[1]) { // 如果是对象的第1个副本存储的硬盘
+                if (current_phase % 2 == 1) { // 奇数，j跳转到对象块副本1的 第奇数块的存储单元
                     printf("j %d\n", object[object_id].unit[1][current_phase / 2 + 1]);
                 } else {
-                    printf("r#\n");
+                    printf("r#\n"); // 偶数，r，读取该块并指向下一个，#，结束操作
                 }
             } else {
-                printf("#\n");
+                printf("#\n"); // 不是对象的第1个副本存储的硬盘，输出#，不操作该硬盘
             }
         }
 
-        if (current_phase == object[object_id].size * 2) {
-            if (object[object_id].is_delete) {
-                printf("0\n");
+        if (current_phase == object[object_id].size * 2) { // 读取完成
+            if (object[object_id].is_delete) { 
+                printf("0\n"); // 对象已删除，读取完成也没用 所以0个请求读取成功
             } else {
-                printf("1\n%d\n", current_request);
+                printf("1\n%d\n", current_request); // 对象未删除，读取完成1个请求读取成功
                 request[current_request].is_done = true;
             }
             current_request = 0;
             current_phase = 0;
         } else {
-            printf("0\n");
+            printf("0\n"); // 读取未完成，输出0
         }
     }
 
@@ -203,19 +203,22 @@ void clean()
 int main()
 {
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-
+    // 统计 同一标签对象信息，多组时间片 删写读 规律
+    // del 对象标签i,第j组时间片(1800一组),总共删除的对象大小(多少对象块)
     for (int i = 1; i <= M; i++) {
         for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
             scanf("%*d");
         }
     }
 
+    // write
     for (int i = 1; i <= M; i++) {
         for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
             scanf("%*d");
         }
     }
 
+    // read
     for (int i = 1; i <= M; i++) {
         for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
             scanf("%*d");
@@ -225,6 +228,7 @@ int main()
     printf("OK\n");
     fflush(stdout);
 
+    // 初始化硬盘指针
     for (int i = 1; i <= N; i++) {
         disk_point[i] = 1;
     }

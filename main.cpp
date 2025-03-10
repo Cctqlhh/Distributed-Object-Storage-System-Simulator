@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cassert>
 #include <cstdlib>
+#include "token_manager.h"
 
 #define MAX_DISK_NUM (10 + 1)
 #define MAX_DISK_SIZE (16384 + 1)
@@ -26,6 +27,7 @@ typedef struct Object_ {
 
 Request request[MAX_REQUEST_NUM];
 Object object[MAX_OBJECT_NUM];
+TokenManager* token_manager;
 
 int T, M, N, V, G;
 int disk[MAX_DISK_NUM][MAX_DISK_SIZE];
@@ -162,8 +164,16 @@ void read_action()
         for (int i = 1; i <= N; i++) {
             if (i == object[object_id].replica[1]) { // 如果是对象的第1个副本存储的硬盘
                 if (current_phase % 2 == 1) { // 奇数，j跳转到对象块副本1的 第奇数块的存储单元
+                    if (!token_manager->consume_jump(i)) {  // 检查特定磁头的jump操作
+                        printf("#\n");
+                        continue;
+                    }
                     printf("j %d\n", object[object_id].unit[1][current_phase / 2 + 1]);
                 } else {
+                    if (!token_manager->consume_read(i)) {  // 检查特定磁头的read操作
+                        printf("#\n");
+                        continue;
+                    }
                     printf("r#\n"); // 偶数，r，读取该块并指向下一个，#，结束操作
                 }
             } else {
@@ -203,6 +213,7 @@ void clean()
 int main()
 {
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
+    token_manager = new TokenManager(G, N);
     // 统计 同一标签对象信息，多组时间片 删写读 规律
     // del 对象标签i,第j组时间片(1800一组),总共删除的对象大小(多少对象块)
     for (int i = 1; i <= M; i++) {
@@ -234,11 +245,13 @@ int main()
     }
 
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
+        token_manager->refresh();
         timestamp_action();
         delete_action();
         write_action();
         read_action();
     }
+    delete token_manager;
     clean();
 
     return 0;

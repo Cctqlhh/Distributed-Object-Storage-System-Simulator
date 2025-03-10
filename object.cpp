@@ -20,28 +20,17 @@ bool Object::write_replica(int replica_idx, Disk& disk) {
     
     for (int i = 1; i <= disk_capacity; i++) {
         if (disk.is_free(i)) {
-            // if (disk.write(i, object_id)) {
-            //     unit_pos[replica_idx][++current_write_point] = i;
-            //     if (current_write_point == size) {
-            //         replica_disks[replica_idx] = disk.get_id();
-            //         return true;
-            //     }
-            // }
-            disk.write(i, object_id);
-            unit_pos[replica_idx][++current_write_point] = i;
-            if (current_write_point == size) {
-                replica_disks[replica_idx] = disk.get_id();
-                return true;
+            if (disk.write(i, object_id)) {
+                unit_pos[replica_idx][++current_write_point] = i;
+                if (current_write_point == size) {
+                    replica_disks[replica_idx] = disk.get_id();
+                    return true;
+                }
             }
         }
     }
     
     // 若写入失败是否应该保留已写入的部分内容
-
-    // if (current_write_point == size) {
-    //     replica_disks[replica_idx] = disk.get_id();
-    //     return true;
-    // }
     assert(current_write_point == size);
     return false;
 }

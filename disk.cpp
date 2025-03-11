@@ -34,3 +34,56 @@ int Disk::get_id() const {
 int Disk::get_capacity() const {
     return capacity;
 }
+
+int Disk::get_continuous_space() const {
+    int max_continuous = 0;
+    int current_continuous = 0;
+    
+    for (int i = 1; i <= capacity; i++) {
+        if (!storage[i]) {  // 如果当前位置未被使用
+            current_continuous++;
+            max_continuous = std::max(max_continuous, current_continuous);
+        } else {
+            current_continuous = 0;
+        }
+    }
+    
+    return max_continuous;
+}
+
+std::pair<int, int> Disk::get_best_continuous_space() const {
+    int max_continuous = 0;
+    int best_start = 1;
+    int current_continuous = 0;
+    int current_start = 1;
+    
+    for (int i = 1; i <= capacity; i++) {
+        if (!storage[i]) {
+            if (current_continuous == 0) {
+                current_start = i;
+            }
+            current_continuous++;
+        } else {
+            if (current_continuous > max_continuous) {
+                max_continuous = current_continuous;
+                best_start = current_start;
+            }
+            current_continuous = 0;
+        }
+    }
+    
+    if (current_continuous > max_continuous) {
+        max_continuous = current_continuous;
+        best_start = current_start;
+    }
+    
+    return {max_continuous, best_start};
+}
+
+int Disk::get_used_count() const {
+    int count = 0;
+    for (int i = 1; i <= capacity; i++) {
+        if (storage[i]) count++;
+    }
+    return count;
+}

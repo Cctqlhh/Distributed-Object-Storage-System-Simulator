@@ -1,208 +1,30 @@
 #include <cstdio>
-#include <cassert>
-#include <cstdlib>
 #include <vector>
-#include "token_manager.h"
-#include "object.h"
-#include "request.h"
-#include "disk.h"
+#include "storage_manager.h"
 
-#define MAX_REQUEST_NUM (30000000 + 1)
-#define MAX_OBJECT_NUM (100000 + 1)
-#define FRE_PER_SLICING (1800)
-#define EXTRA_TIME (105)
-std::vector<Request> requests(MAX_REQUEST_NUM);
-std::vector<Object> objects(MAX_OBJECT_NUM);
-std::vector<Disk> disks;
-TokenManager* token_manager;
-
-int T, M, N, V, G;
-void timestamp_action()
-{
-    int timestamp;
-    scanf("%*s%d", &timestamp);
-    printf("TIMESTAMP %d\n", timestamp);
-
-    fflush(stdout);
-}
-
-void delete_action()
-{
-    int n_delete;
-    int abort_num = 0;
-    static int _id[MAX_OBJECT_NUM];
-
-    scanf("%d", &n_delete); // 要删除的对象个数
-    for (int i = 1; i <= n_delete; i++) {
-        scanf("%d", &_id[i]); // 要删除的对象id
-    }
-
-    for (int i = 1; i <= n_delete; i++) {
-        int id = _id[i];
-        int current_id = objects[id].get_last_request();
-        while (current_id != 0) { // 遍历请求链表
-            if (!requests[current_id].is_completed()) {
-                abort_num++; // 统计未完成的请求个数
-            }     
-            current_id = requests[current_id].get_prev_id();
-        }
-    }
-
-    printf("%d\n", abort_num);
-    for (int i = 1; i <= n_delete; i++) {
-        int id = _id[i];
-        int current_id = objects[id].get_last_request();
-        while (current_id != 0) {
-            if (!requests[current_id].is_completed()) {
-                printf("%d\n", current_id);
-            }
-            current_id = requests[current_id].get_prev_id();
-        }
-        for (int j = 1; j <= REP_NUM; j++) {
-            int disk_id = objects[id].get_replica_disk_id(j);
-            objects[id].delete_replica(j, disks[disk_id]);
-        }
-        objects[id].mark_as_deleted();
-    }
-
-    fflush(stdout);
-}
-
-void write_action()
-{
-    int n_write;
-    scanf("%d", &n_write); // 要写的对象个数
-    for (int i = 1; i <= n_write; i++) { // 要写的对象
-        int id, size;
-        scanf("%d%d%*d", &id, &size); // 对象id,对象大小,对象标签(未保存)
-        objects[id] = Object(id, size);
-        for (int j = 1; j <= REP_NUM; j++) { // 对象的第j个副本
-        
-            int disk_id = (id + j) % N + 1;
-            if (!objects[id].write_replica(j, disks[disk_id])) {
-                assert(false);  // 写入失败
-            }
-        }
-
-        printf("%d\n", id);
-        for (int j = 1; j <= REP_NUM; j++) {
-            printf("%d", objects[id].get_replica_disk_id(j));
-            for (int k = 1; k <= size; k++) {
-                printf(" %d", objects[id].get_storage_position(j, k));
-            }
-            printf("\n");
-        }
-    }
-
-    fflush(stdout);
-}
-
-void read_action()
-{
-    int n_read;
-    int request_id, object_id; 
-    scanf("%d", &n_read); // 要读的请求个数，读取几个对象
-    for (int i = 1; i <= n_read; i++) {
-        scanf("%d%d", &request_id, &object_id); // 请求id,对象id
-        requests[request_id] = Request(request_id, object_id);
-        requests[request_id].link_to_previous(objects[object_id].get_last_request());
-        objects[object_id].update_last_request(request_id);
-    }
-
-    static int current_request = 0;
-    static int current_phase = 0;
-    if (!current_request && n_read > 0) {
-        current_request = request_id;
-    }
-    if (!current_request) { // 没有处理请求
-        for (int i = 1; i <= N; i++) { // 遍历所有硬盘，输出# 不操作
-            printf("#\n");
-        }
-        printf("0\n"); // 没有处理请求，读取完成0个请求
-    } else {
-        current_phase++; // 请求读取的对象id
-        object_id = requests[current_request].get_object_id();
-        for (int i = 1; i <= N; i++) {// 如果是对象的第1个副本存储的硬盘
-            if (i == objects[object_id].get_replica_disk_id(1)) {
-                if (current_phase % 2 == 1) { // 奇数，j跳转到对象块副本1的 第奇数块的存储单元
-                    if (!token_manager->consume_jump(i)) {  // 检查特定磁头的jump操作
-                        printf("#\n");
-                        continue;
-                    }
-                    printf("j %d\n", objects[object_id].get_storage_position(1, current_phase / 2 + 1));
-                } else {
-                    if (!token_manager->consume_read(i)) {  // 检查特定磁头的read操作
-                        printf("#\n");
-                        continue;
-                    }
-                    printf("r#\n"); // 偶数，r，读取该块并指向下一个，#，结束操作
-                }
-            } else {
-                printf("#\n"); // 不是对象的第1个副本存储的硬盘，输出#，不操作该硬盘
-            }
-        }
- // 读取完成
-        if (current_phase == objects[object_id].get_size() * 2) {
-            if (objects[object_id].is_deleted_status()) {
-                printf("0\n"); // 对象已删除，读取完成也没用 所以0个请求读取成功
-            } else {
-                printf("1\n%d\n", current_request); // 对象未删除，读取完成1个请求读取成功
-                requests[current_request].mark_as_completed();
-            }
-            current_request = 0;
-            current_phase = 0;
-        } else {
-            printf("0\n"); // 读取未完成，输出0
-        }
-    }
-
-    fflush(stdout);
-}
-
-int main()
-{
+int main() {
+    int T, M, N, V, G;
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
     
-    // 初始化磁盘
-    disks.resize(N + 1);
+    std::vector<Request> requests(MAX_REQUEST_NUM);
+    std::vector<Object> objects(MAX_OBJECT_NUM);
+    std::vector<Disk> disks(N + 1);
+    std::vector<TagStats> tag_stats(M + 1);
+
     for (int i = 1; i <= N; i++) {
         disks[i] = Disk(i, V);
     }
 
-    token_manager = new TokenManager(G, N);
-    // 统计 同一标签对象信息，多组时间片 删写读 规律
-    // del 对象标签i,第j组时间片(1800一组),总共删除的对象大小(多少对象块)
-    for (int i = 1; i <= M; i++) {
-        for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
-        }
-    }
-
-    // write
-    for (int i = 1; i <= M; i++) {
-        for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
-        }
-    }
-
-    // read
-    for (int i = 1; i <= M; i++) {
-        for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
-        }
-    }
-
-    printf("OK\n");
-    fflush(stdout);
+    StorageManager storage_manager(requests, objects, disks, tag_stats, T, M, N, V, G);
+    storage_manager.init_system();
 
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
-        token_manager->refresh();
-        timestamp_action();
-        delete_action();
-        write_action();
-        read_action();
+        storage_manager.refresh_tokens();
+        storage_manager.process_timestamp(t);
+        storage_manager.process_delete();
+        storage_manager.process_write();
+        storage_manager.process_read();
     }
-    delete token_manager;
 
     return 0;
 }

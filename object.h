@@ -24,7 +24,6 @@ public:
     int get_last_request() const;
     int get_size() const;
     int get_replica_disk_id(int replica_idx) const;
-    int get_capacity() const;
     void set_replica_disk(int replica_idx, int disk_id);
     bool is_valid_replica(int replica_idx) const;
 };

@@ -4,9 +4,8 @@
 Disk::Disk(int disk_id, int disk_capacity) 
     : id(disk_id)
     , capacity(disk_capacity)
-    , head_position(1) {
-    storage.resize(capacity + 1, 0);  // 初始化为0，表示空闲
-}
+    , head_position(1)
+    , storage(disk_capacity + 1, 0) {}
 
 bool Disk::write(int position, int object_id) {
     assert(position > 0 && position <= capacity);

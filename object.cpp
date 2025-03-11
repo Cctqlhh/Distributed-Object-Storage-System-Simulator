@@ -5,13 +5,9 @@ Object::Object(int id, int size)
     : object_id(id)
     , size(size)
     , last_request_point(0)
-    , is_deleted(false) {
-    replica_disks.resize(REP_NUM + 1);  // REP_NUM + 1，保持与原代码一致从1开始索引
-    unit_pos.resize(REP_NUM + 1);       // REP_NUM + 1
-    for (int i = 1; i <= REP_NUM; i++) {
-        unit_pos[i].resize(size + 1);
-    }
-}
+    , is_deleted(false)
+    , replica_disks(REP_NUM + 1)
+    , unit_pos(REP_NUM + 1, std::vector<int>(size + 1)){}
 // replica_idx 副本id
 // bool Object::write_replica(int replica_idx, Disk& disk) {
 //     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查

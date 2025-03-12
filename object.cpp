@@ -112,3 +112,23 @@ bool Object::is_valid_replica(int replica_idx) const {
     assert(replica_idx > 0 && replica_idx < replica_disks.size());
     return replica_disks[replica_idx] > 0;
 }
+// 添加一个辅助方法来判断副本的某个块是否已写入
+bool Object::is_block_written(int replica_idx, int block_idx) const {
+    assert(replica_idx > 0 && replica_idx < unit_pos.size());
+    assert(block_idx > 0 && block_idx < unit_pos[replica_idx].size());
+    return unit_pos[replica_idx][block_idx] > 0;
+}
+// 添加一个方法检查对象是否完整（所有块至少有一个副本 已经写入），确保对象可完整读取
+bool Object::is_object_complete() const {
+    for (int block_idx = 1; block_idx <= size; block_idx++) {
+        bool block_exists = false;
+        for (int replica_idx = 1; replica_idx <= REP_NUM; replica_idx++) {
+            if (is_block_written(replica_idx, block_idx)) {
+                block_exists = true;
+                break;
+            }
+        }
+        if (!block_exists) return false;
+    }
+    return true;
+}

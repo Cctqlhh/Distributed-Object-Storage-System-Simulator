@@ -6,6 +6,7 @@
 
 #define REP_NUM 3
 
+
 class TagManager {
 private:
     int tag_id;
@@ -26,10 +27,10 @@ private:
     bool is_deleted;
 
 public:
-    TagManager(int tag_id, int reserve_size, int ) : 
-        tag_id(tag_id),
-        reserve_size(reserve_size),
-        {}
+    // TagManager(int tag_id, int reserve_size, int ) : 
+    //     tag_id(tag_id),
+    //     reserve_size(reserve_size),
+    //     {}
     
     // 刷新令牌（每个时间片调用）
     // void refresh() {

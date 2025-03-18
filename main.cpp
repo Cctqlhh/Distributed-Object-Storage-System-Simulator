@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <vector>
-#include "token_manager.h"
+// #include "token_manager.h"
 #include "object.h"
 #include "request.h"
 #include "disk.h"
@@ -14,7 +14,7 @@
 std::vector<Request> requests(MAX_REQUEST_NUM);
 std::vector<Object> objects(MAX_OBJECT_NUM);
 std::vector<Disk> disks;
-TokenManager* token_manager;
+// TokenManager* token_manager;
 
 int T, M, N, V, G;
 void timestamp_action()
@@ -99,16 +99,18 @@ void write_action()
 
 void read_action()
 {
+// 获取读取请求
     int n_read;
     int request_id, object_id; 
     scanf("%d", &n_read); // 要读的请求个数，读取几个对象
     for (int i = 1; i <= n_read; i++) {
         scanf("%d%d", &request_id, &object_id); // 请求id,对象id
-        requests[request_id] = Request(request_id, object_id);
-        requests[request_id].link_to_previous(objects[object_id].get_last_request());
-        objects[object_id].update_last_request(request_id);
+        requests[request_id] = Request(request_id, object_id); // 创建request对象
+        requests[request_id].link_to_previous(objects[object_id].get_last_request()); // 请求链表链接
+        objects[object_id].update_last_request(request_id); // 更新对象最后新增的请求 不影响读取，只方便删除
     }
-
+    
+//获取请求完成，开始读取操作
     static int current_request = 0;
     static int current_phase = 0;
     if (!current_request && n_read > 0) {
@@ -125,13 +127,13 @@ void read_action()
         for (int i = 1; i <= N; i++) {// 如果是对象的第1个副本存储的硬盘
             if (i == objects[object_id].get_replica_disk_id(1)) {
                 if (current_phase % 2 == 1) { // 奇数，j跳转到对象块副本1的 第奇数块的存储单元
-                    if (!token_manager->consume_jump(i)) {  // 检查特定磁头的jump操作
+                    if (!disks[i].jump(current_phase / 2 + 1)) {  // 检查特定磁头的jump操作
                         printf("#\n");
                         continue;
                     }
                     printf("j %d\n", objects[object_id].get_storage_position(1, current_phase / 2 + 1));
                 } else {
-                    if (!token_manager->consume_read(i)) {  // 检查特定磁头的read操作
+                    if (!disks[i].read()) {  // 检查特定磁头的read操作
                         printf("#\n");
                         continue;
                     }
@@ -141,7 +143,7 @@ void read_action()
                 printf("#\n"); // 不是对象的第1个副本存储的硬盘，输出#，不操作该硬盘
             }
         }
- // 读取完成
+ // 读取完成 输出阶段
         if (current_phase == objects[object_id].get_size() * 2) {
             if (objects[object_id].is_deleted_status()) {
                 printf("0\n"); // 对象已删除，读取完成也没用 所以0个请求读取成功
@@ -160,16 +162,17 @@ void read_action()
 }
 
 int main()
-{
+{   
+    // 时间片，标签个数，磁盘个数，磁盘容量，token数量
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
     
     // 初始化磁盘
     disks.resize(N + 1);
     for (int i = 1; i <= N; i++) {
-        disks[i] = Disk(i, V);
+        disks[i] = Disk(i, V, G);
     }
 
-    token_manager = new TokenManager(G, N);
+    // token_manager = new TokenManager(G, N);
     // 统计 同一标签对象信息，多组时间片 删写读 规律
     // del 对象标签i,第j组时间片(1800一组),总共删除的对象大小(多少对象块)
     for (int i = 1; i <= M; i++) {
@@ -196,13 +199,16 @@ int main()
     fflush(stdout);
 
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
-        token_manager->refresh();
+        // token_manager->refresh();
+        for (auto& disk : disks) {
+            disk.refresh_token_manager();
+        }
         timestamp_action();
         delete_action();
         write_action();
         read_action();
     }
-    delete token_manager;
+    // delete token_manager;
 
     return 0;
 }

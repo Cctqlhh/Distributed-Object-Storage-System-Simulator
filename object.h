@@ -10,7 +10,7 @@ private:
     int size;
     std::vector<int> replica_disks;           // 副本所在磁盘ID
     std::vector<std::vector<int>> unit_pos;   // 每个副本的存储单元位置 3个副本，每个副本最多存储size个块
-    int last_request_point;
+    int last_request_point;                  // 最后一次读取该对象的 请求id
     bool is_deleted;
 
 public:
@@ -24,7 +24,6 @@ public:
     int get_last_request() const;
     int get_size() const;
     int get_replica_disk_id(int replica_idx) const;
-    int get_capacity() const;
     void set_replica_disk(int replica_idx, int disk_id);
     bool is_valid_replica(int replica_idx) const;
 };

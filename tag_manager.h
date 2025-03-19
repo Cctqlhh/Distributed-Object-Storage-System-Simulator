@@ -1,43 +1,22 @@
 #pragma once
 #include <vector>
-#include <set>
-#include <unordered_map>
+#include <unordered_set>
 #include "disk.h"
 
-#define REP_NUM 3
-
+#define REP_NUM 3  // 每个标签需要分配3个不同的磁盘存储副本
+#define PARTITION_ALLOCATION_THRESHOLD 20  // 选择第20个时间片组作为计算标签初始存储需求的基准
 
 class TagManager {
-private:
-    int tag_id;
-    std::vector<int> disk_id;
-    int reserve_size; // 1/3
-    std::vector<int> start_pos; // 3个磁盘的起始位置，后续位置通过+n(0 1 2) size确定
-    std::vector<int> end_pos; // 3个磁盘的结束位置 前1/3部分
-    std::vector<int> dynamic_end_pos; // 3个磁盘的动态结束位置
-    std::vector<std::unordered_map<int, std::vector<int>>> fix_size_free_pos_map; // 3个磁盘，每个磁盘的固定大小空闲位置map
-    std::vector<std::unordered_map<int, std::vector<int>>> dynamic_size_free_pos_map; // 随磁头动态
-
-    // std::vector<std::set<std::pair<int, int>>> fix_free_continue_space; // start size
-    // 移动到reserve之后时，更新为相应 固定空闲连续空间set+reserve偏移
-    // std::vector<std::set<std::pair<int, int>>> dynamic_free_continue_space; // start size
-       // std::vector<int> replica_disks;           // 副本所在磁盘ID
-    std::vector<std::vector<int>> unit_pos;   // 每个副本的存储单元位置 3个副本，每个副本最多存储size个块
-    int last_request_point;
-    bool is_deleted;
-
 public:
-    // TagManager(int tag_id, int reserve_size, int ) : 
-    //     tag_id(tag_id),
-    //     reserve_size(reserve_size),
-    //     {}
-    
-    // 刷新令牌（每个时间片调用）
-    // void refresh() {
-    //     for (int i = 1; i <= disk_num_; i++) {
-    //         current_tokens_[i] = max_tokens_;
-    //     }
-    // } 
+    std::vector<std::vector<int>> tag_disk_mapping;  // 记录每个标签分配的 3 个磁盘
+    std::vector<std::vector<int>> tag_partition_mapping;  // 记录每个标签在所分配磁盘上的区间块数量
+    std::vector<std::vector<int>> disk_partition_usage;  // 记录每个磁盘的区间块分配情况
 
-
+    TagManager(int M, int N);
+    // 为每个标签分配磁盘和区间块
+    void allocate_tag_storage(const std::vector<std::vector<int>>& sum, 
+                              const std::vector<std::vector<int>>& conflict_matrix,
+                              std::vector<Disk>& disks);
+    // 计算最终磁盘分布
+    void allocate_final_storage(std::vector<Disk>& disks); 
 };

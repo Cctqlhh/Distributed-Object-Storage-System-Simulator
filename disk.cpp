@@ -6,9 +6,15 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     , capacity(disk_capacity)
     , head_position(1)
     , storage(disk_capacity + 1, 0)
-    , max_tokens_(max_tokens) {
-        token_manager = new TokenManager(max_tokens);
+    , max_tokens_(max_tokens) 
+    , partition_size(std::ceil(static_cast<double>(disk_capacity) / DISK_PARTITIONS)) {
+    token_manager = new TokenManager(max_tokens);
+    // 初始化每个存储单元的分区信息
+    partition_info.resize(disk_capacity + 1);
+    for (int i = 1; i <= disk_capacity; i++) {
+        partition_info[i] = (i - 1) / partition_size + 1;  // 计算分区编号
     }
+}
 
 bool Disk::write(int position, int object_id) {
     assert(position > 0 && position <= capacity);
@@ -50,7 +56,7 @@ int Disk::get_need_token_to_head(int position) const {
     int distance = get_distance_to_head(position);
     return 0; ////////
 }
-int Disk::refresh_token_manager(){
+void Disk::refresh_token_manager(){
     token_manager->refresh();
     return 0;
 }
@@ -59,8 +65,8 @@ int Disk::jump(int position){
     if(token_manager->consume_jump()){
         head_position = position;
         return head_position;
-    }
-    else return 0;
+    } else 
+        return 0;
 }
 int Disk::pass(){
     if(token_manager->consume_pass()){
@@ -79,4 +85,14 @@ int Disk::read(){
         return head_position;
     }
     else return 0;
+}
+
+int Disk::get_partition(int position) const {
+    assert(position > 0 && position <= capacity);
+    return partition_info[position];
+}
+
+
+int Disk::get_partition_size() const {
+    return partition_size;
 }

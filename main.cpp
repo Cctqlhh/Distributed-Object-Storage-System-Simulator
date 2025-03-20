@@ -2,21 +2,121 @@
 #include <cassert>
 #include <cstdlib>
 #include <vector>
+#include <cmath> // 用于 ceil 计算
+#include <algorithm>  // 用于排序
 // #include "token_manager.h"
 #include "object.h"
 #include "request.h"
 #include "disk.h"
+#include "tag_manager.h"
 
 #define MAX_REQUEST_NUM (30000000 + 1)
 #define MAX_OBJECT_NUM (100000 + 1)
 #define FRE_PER_SLICING (1800)
 #define EXTRA_TIME (105)
+#define HEAT_THRESHOLD 25000  // 设定热度阈值
+#define PARTITION_ALLOCATION_THRESHOLD 20  // 选取第20个时间片组进行分配
+
 std::vector<Request> requests(MAX_REQUEST_NUM);
 std::vector<Object> objects(MAX_OBJECT_NUM);
 std::vector<Disk> disks;
 // TokenManager* token_manager;
 
 int T, M, N, V, G;
+TagManager tagmanager(0, 0);
+
+void preprocess() {
+    // 时间片，标签个数，磁盘个数，磁盘容量，token数量
+    scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
+    // 初始化全局 TagManager
+    tagmanager = TagManager(M, N);
+    // 计算时间片组数
+    int slicing_count = (T - 1) / FRE_PER_SLICING + 1;
+    // 数据接收
+    // 存储时间片删除、写入、读取的数据
+    std::vector<std::vector<int>> fre_del(M + 1, std::vector<int>(slicing_count + 1, 0));
+    std::vector<std::vector<int>> fre_write(M + 1, std::vector<int>(slicing_count + 1, 0));
+    std::vector<std::vector<int>> fre_read(M + 1, std::vector<int>(slicing_count + 1, 0));
+    std::vector<std::vector<int>> sum(M + 1, std::vector<int>(slicing_count + 1, 0)); // 对象累积总大小
+    std::vector<std::vector<int>> write_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 写入矩阵
+    std::vector<std::vector<int>> conflict_matrix(M + 1, std::vector<int>(M + 1, 0)); // 冲突矩阵
+    // fre_del
+    for (int i = 1; i <= M; i++)
+    {
+        for (int j = 1; j <= slicing_count; j++)
+        {
+            scanf("%d", &fre_del[i][j]);
+        }
+    }
+    // fre_write
+    for (int i = 1; i <= M; i++)
+    {
+        for (int j = 1; j <= slicing_count; j++)
+        {
+            scanf("%d", &fre_write[i][j]);
+        }
+    }
+    // fre_read
+    for (int i = 1; i <= M; i++)
+    {
+        for (int j = 1; j <= slicing_count; j++)
+        {
+            scanf("%d", &fre_read[i][j]);
+        }
+    }
+
+    // 数据处理
+    // 计算 sum（对象累积总大小）
+    for (int i = 1; i <= M; i++) {
+        sum[i][1] = fre_write[i][1]; // 第一列直接赋值
+        for (int j = 2; j <= slicing_count; j++) {
+            sum[i][j] = sum[i][j - 1] + fre_write[i][j] - fre_del[i][j - 1];
+            // 确保累积值不为负数
+            if (sum[i][j] < 0) sum[i][j] = 0;
+        }
+    }
+
+    // 计算写入矩阵（根据热度阈值）
+    for (int i = 1; i <= M; i++) {
+        for (int j = 1; j <= slicing_count; j++) {
+            write_matrix[i][j] = (fre_write[i][j] >= HEAT_THRESHOLD) ? 1 : 0;
+        }
+    }
+
+    // 计算冲突矩阵
+    for (int a = 1; a <= M; a++) {
+        for (int b = 1; b <= M; b++) {
+            if (a == b) continue; // 不计算自身冲突
+            int conflict_count = 0;
+            for (int j = 1; j <= slicing_count; j++) {
+                if (write_matrix[a][j] == 1 && write_matrix[b][j] == 1) {
+                    conflict_count++;
+                }
+            }
+            conflict_matrix[a][b] = conflict_count;
+        }
+    }
+
+    // 初始化磁盘，把硬盘划分为二维区间块   有问题？？？
+    disks.resize(N + 1);
+    for (int i = 1; i <= N; i++) {
+        disks[i] = Disk(i, V, G);
+    }
+
+    // 调用全局 tagmanager 进行标签分配
+    tagmanager.allocate_tag_storage(sum, conflict_matrix, disks);
+
+    // 预处理结束
+    printf("OK\n");
+    fflush(stdout);
+}
+
+
+
+
+
+
+
 void timestamp_action()
 {
     int timestamp;
@@ -163,41 +263,7 @@ void read_action()
 
 int main()
 {   
-    // 时间片，标签个数，磁盘个数，磁盘容量，token数量
-    scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    
-    // 初始化磁盘
-    disks.resize(N + 1);
-    for (int i = 1; i <= N; i++) {
-        disks[i] = Disk(i, V, G);
-    }
-
-    // token_manager = new TokenManager(G, N);
-    // 统计 同一标签对象信息，多组时间片 删写读 规律
-    // del 对象标签i,第j组时间片(1800一组),总共删除的对象大小(多少对象块)
-    for (int i = 1; i <= M; i++) {
-        for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
-        }
-    }
-
-    // write
-    for (int i = 1; i <= M; i++) {
-        for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
-        }
-    }
-
-    // read
-    for (int i = 1; i <= M; i++) {
-        for (int j = 1; j <= (T - 1) / FRE_PER_SLICING + 1; j++) {
-            scanf("%*d");
-        }
-    }
-
-    printf("OK\n");
-    fflush(stdout);
-
+    preprocess();
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
         // token_manager->refresh();
         for (auto& disk : disks) {

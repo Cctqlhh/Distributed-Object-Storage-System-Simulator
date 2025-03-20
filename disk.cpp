@@ -54,10 +54,11 @@ int Disk::get_distance_to_head(int position) const {
 int Disk::get_need_token_to_head(int position) const {
     assert(position > 0 && position <= capacity);
     int distance = get_distance_to_head(position);
-    return distance;
+    return 0; ////////
 }
 void Disk::refresh_token_manager(){
     token_manager->refresh();
+    return 0;
 }
 
 int Disk::jump(int position){

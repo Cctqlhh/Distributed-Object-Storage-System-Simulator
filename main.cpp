@@ -111,12 +111,6 @@ void preprocess() {
     fflush(stdout);
 }
 
-
-
-
-
-
-
 void timestamp_action()
 {
     int timestamp;

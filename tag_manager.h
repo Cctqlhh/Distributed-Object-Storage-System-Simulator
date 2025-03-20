@@ -8,9 +8,9 @@
 
 class TagManager {
 public:
-    std::vector<std::vector<int>> tag_disk_mapping;  // 记录每个标签分配的 3 个磁盘
-    std::vector<std::vector<int>> tag_partition_mapping;  // 记录每个标签在所分配磁盘上的区间块数量
-    std::vector<std::vector<int>> disk_partition_usage;  // 记录每个磁盘的区间块分配情况
+    std::vector<std::vector<int>> tag_disk_mapping;         // 记录每个标签分配的 3 个磁盘
+    std::vector<std::vector<int>> tag_partition_mapping;    // 记录每个标签在所分配磁盘上的区间块数量
+    std::vector<std::vector<int>> disk_partition_usage;     // 记录每个磁盘的区间块分配情况
 
     TagManager(int M, int N);
     // 为每个标签分配磁盘和区间块

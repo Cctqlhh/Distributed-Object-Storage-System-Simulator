@@ -9,10 +9,28 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     , max_tokens_(max_tokens) 
     , partition_size(std::ceil(static_cast<double>(disk_capacity) / DISK_PARTITIONS)) {
     token_manager = new TokenManager(max_tokens);
+
     // 初始化每个存储单元的分区信息
-    partition_info.resize(disk_capacity + 1);
+    storage_partition_map.resize(disk_capacity + 1);
+    partitions.resize(DISK_PARTITIONS + 1);  // 分区编号从 1 到 20
+
+    // 计算区间块的起始索引和大小
+    for (int i = 1; i <= DISK_PARTITIONS; i++) {  
+        int start = (i - 1) * partition_size + 1;
+        int end = std::min(start + partition_size - 1, capacity); 
+
+        partitions[i] = {start, end - start + 1}; 
+    }
+
+    // 计算存储单元所属的分区
     for (int i = 1; i <= disk_capacity; i++) {
-        partition_info[i] = (i - 1) / partition_size + 1;  // 计算分区编号
+        for (int j = 1; j <= DISK_PARTITIONS; j++) {
+            if (i >= partitions[j].start && i < partitions[j].start + partitions[j].size) {
+                storage_partition_map[i] = j;  // 直接匹配区间
+                break;
+            }
+        }
+        assert(storage_partition_map[i] >= 1 && storage_partition_map[i] <= DISK_PARTITIONS);  // 确保映射合法
     }
 }
 
@@ -50,6 +68,7 @@ int Disk::get_distance_to_head(int position) const {
         return capacity - head_position + position;
     else return position - head_position;
 }
+
 
 std::pair<int,int> Disk::get_need_token_to_head(int position) const {
     assert(position > 0 && position <= capacity);
@@ -134,12 +153,17 @@ int Disk::read(){
     else return 0;
 }
 
-int Disk::get_partition(int position) const {
+int Disk::get_partition_id(int position) const {
     assert(position > 0 && position <= capacity);
-    return partition_info[position];
+    return storage_partition_map[position];
 }
 
 
 int Disk::get_partition_size() const {
     return partition_size;
+}
+
+const PartitionInfo& Disk::get_partition_info(int partition_id) const {
+    assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
+    return partitions[partition_id];
 }

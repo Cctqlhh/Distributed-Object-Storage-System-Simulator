@@ -200,8 +200,8 @@ int main()
 
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
         // token_manager->refresh();
-        for (auto& disk : disks) {
-            disk.refresh_token_manager();
+        for (int i=1; i<=N; i++) {
+            disks[i].refresh_token_manager();
         }
         timestamp_action();
         delete_action();

@@ -58,7 +58,6 @@ int Disk::get_need_token_to_head(int position) const {
 }
 void Disk::refresh_token_manager(){
     token_manager->refresh();
-    return 0;
 }
 
 int Disk::jump(int position){

@@ -51,11 +51,59 @@ int Disk::get_distance_to_head(int position) const {
     else return position - head_position;
 }
 
-int Disk::get_need_token_to_head(int position) const {
+std::pair<int,int> Disk::get_need_token_to_head(int position) const {
     assert(position > 0 && position <= capacity);
-    int distance = get_distance_to_head(position);
-    return 0; ////////
+    // int distance = get_distance_to_head(position);
+    int read_cost = get_need_token_continue_read(position);
+    int pass_cost = get_need_token_continue_pass(position);
+    int cur_rest_tokens = token_manager->get_current_tokens();
+    int cost;
+    int action;
+    if(read_cost <= pass_cost){
+        cost = read_cost;
+        action = 0;
+    }
+    else{
+        cost = pass_cost;
+        action = 1;
+    }
+    // 如果是初始阶段 可选择jump
+    if(cur_rest_tokens == max_tokens_){
+        if(cost < max_tokens_) return {action, cost};
+        return {-1, max_tokens_};
+    }
+    // 如果是中间阶段，不能jump
+    if(cost > cur_rest_tokens + max_tokens_){
+        return {-2, max_tokens_ + cur_rest_tokens};
+    }
+    return {action, cost};
 }
+
+int Disk::get_need_token_continue_read(int position) const{
+    int distance = get_distance_to_head(position);
+    // (1+(p2-p1))*readi
+    int prev_read_cost_ = token_manager->get_prev_read_cost();
+    int cost;
+    if(!token_manager->get_last_is_read()){
+        prev_read_cost_ = 64;
+        cost = prev_read_cost_;
+    } else {
+        prev_read_cost_ = std::max(16, static_cast<int>(std::ceil(prev_read_cost_ * 0.8)));
+        cost = prev_read_cost_;
+    }
+    for(int i = 1; i <= distance; i++){
+        prev_read_cost_ = std::max(16, static_cast<int>(std::ceil(prev_read_cost_ * 0.8)));
+        cost += prev_read_cost_;
+    }
+    return cost;
+}
+
+int Disk::get_need_token_continue_pass(int position) const{
+    int distance = get_distance_to_head(position);
+    int cost = distance + 64;
+    return cost;
+}
+
 void Disk::refresh_token_manager(){
     token_manager->refresh();
 }

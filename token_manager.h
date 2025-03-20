@@ -76,4 +76,8 @@ public:
     int get_prev_read_cost() const {
         return prev_read_cost_;
     }
+
+    bool get_last_is_read() const {
+        return last_is_read_;
+    }
 };

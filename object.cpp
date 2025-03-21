@@ -7,7 +7,10 @@ Object::Object(int id, int size)
     , last_request_point(0)
     , is_deleted(false)
     , replica_disks(REP_NUM + 1)
-    , unit_pos(REP_NUM + 1, std::vector<int>(size + 1)){}
+    , unit_pos(REP_NUM + 1, std::vector<int>(size + 1))
+    , partition_id(REP_NUM + 1)
+    , request_num(0) {}
+    
 // replica_idx 副本id
 // bool Object::write_replica(int replica_idx, Disk& disk) {
 //     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查
@@ -66,6 +69,7 @@ void Object::delete_replica(int replica_idx, Disk& disk) {
     for (int i = 1; i <= size; i++) {
         disk.erase(unit_pos[replica_idx][i]);
     }
+    request_num = 0;
 }
 
 int Object::get_storage_position(int replica_idx, int block_idx) const {
@@ -84,6 +88,7 @@ void Object::mark_as_deleted() {
 
 void Object::update_last_request(int request_id) {
     last_request_point = request_id;
+    add_request();
 }
 
 int Object::get_last_request() const {
@@ -111,4 +116,37 @@ void Object::set_replica_disk(int replica_idx, int disk_id) {
 bool Object::is_valid_replica(int replica_idx) const {
     assert(replica_idx > 0 && replica_idx < replica_disks.size());
     return replica_disks[replica_idx] > 0;
+}
+
+int Object::get_partition_id(int replica_idx) const {
+    return partition_id[replica_idx];
+}
+
+int Object::is_in_disk(int disk_id) const{
+    for(int i = 1; i <= REP_NUM; i++){
+        if(replica_disks[i] == disk_id) return i;
+    }
+    return 0;
+}
+
+int Object::get_which_unit(int disk_id, int unit_pos) const{
+    int replica_idx = is_in_disk(disk_id);
+    int pos = 0;
+    for(int block_idx=1; block_idx<=size; block_idx++){
+        pos = get_storage_position(replica_idx, block_idx);
+        if(pos == unit_pos) return block_idx;
+    }
+    return 0;
+}
+
+void Object::add_request(){
+    request_num++;
+}
+
+void Object::reduce_request(){
+    request_num--;
+}
+
+int Object::get_request_num() const {
+    return request_num;
 }

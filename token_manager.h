@@ -1,6 +1,8 @@
 #pragma once
-#include <cmath>
-#include <vector>
+#include "global.h"
+// #include <cmath>
+// #include <vector>
+// #include <iostream>
 
 class TokenManager {
 private:
@@ -26,9 +28,11 @@ public:
     // 尝试消耗指定磁头的令牌
     bool try_consume(int tokens) {
         if (current_tokens_ >= tokens) {
+            // std::cerr << "current_tokens_" << current_tokens_ << " ok" << std::endl;
             current_tokens_ -= tokens;
             return true;
         }
+        // std::cerr << "current_tokens_" << current_tokens_ << " no" << std::endl;
         return false;
     }
 

@@ -1,6 +1,11 @@
 #pragma once
-#include <vector>
+#include "global.h"
+// #include <vector>
+// #include <queue>
+// #include <memory>
+// #include <unordered_map>
 #include "token_manager.h"
+// #include "request.h"
 
 #define DISK_PARTITIONS 20  // 定义硬盘分区数
 
@@ -8,7 +13,119 @@
 struct PartitionInfo {
     int start;  // 该区间块的起始位置（存储单元索引）
     int size;   // 该区间块的大小
+    float score;  // 该区间块的优先级得分
+    PartitionInfo* next;  // 指向下一个区间块的指针
+    // std::vector<int> need_read;  // 该区间块的每个存储单元是否需要读，需要读取的次数
+    
+    PartitionInfo() : start(0), size(0), score(0) {}  // 默认构造函数
+    // PartitionInfo(int s, int sz) : start(s), size(sz), score(0), need_read(sz, 0) {}  // 带参数的构造函数
+    PartitionInfo(int s, int sz) : start(s), size(sz), score(0) {}  // 带参数的构造函数
+    
+    // 重载 < 运算符，用于排序
+    bool operator<(const PartitionInfo& other) const {
+        return score < other.score;
+    }
+    // 重载 == 运算符，用于判断两个 PartitionInfo 对象是否相等
+    bool operator==(const PartitionInfo& other) const {
+        return start == other.start && size == other.size;
+    }
 };
+
+class DynamicPartitionHeap {
+    private:
+        // 使用 vector 存储堆中元素（指向 PartitionInfo 对象的指针）
+        std::vector<PartitionInfo*> heap;
+        // 使用哈希表记录每个元素在 heap 中的索引，便于快速定位更新位置
+        std::unordered_map<PartitionInfo*, size_t> positions;
+    
+        // 交换堆中两个元素的位置，并更新 positions 映射
+        void swapNodes(size_t i, size_t j) {
+            std::swap(heap[i], heap[j]);
+            positions[heap[i]] = i;
+            positions[heap[j]] = j;
+        }
+    
+        // 自下而上调整堆（上浮操作），用于元素 score 增加时
+        void heapifyUp(size_t index) {
+            while (index > 0) {
+                size_t parent = (index - 1) / 2;
+                // 这里调用 PartitionInfo 的 < 运算符，score 越高优先级越高
+                if (*heap[parent] < *heap[index]) {
+                    swapNodes(index, parent);
+                    index = parent;
+                } else {
+                    break;
+                }
+            }
+        }
+    
+        // 自上而下调整堆（下沉操作），用于元素 score 减小时
+        void heapifyDown(size_t index) {
+            size_t n = heap.size();
+            while (true) {
+                size_t left = 2 * index + 1;
+                size_t right = 2 * index + 2;
+                size_t largest = index;
+                if (left < n && *heap[largest] < *heap[left]) {
+                    largest = left;
+                }
+                if (right < n && *heap[largest] < *heap[right]) {
+                    largest = right;
+                }
+                if (largest != index) {
+                    swapNodes(index, largest);
+                    index = largest;
+                } else {
+                    break;
+                }
+            }
+        }
+    
+    public:
+        DynamicPartitionHeap() {}
+    
+        // 插入新元素
+        void push(PartitionInfo* item) {
+            heap.push_back(item);
+            positions[item] = heap.size() - 1;
+            heapifyUp(heap.size() - 1);
+        }
+    
+        // 返回堆顶元素
+        PartitionInfo* top() {
+            if (heap.empty()) return nullptr;
+            return heap[0];
+        }
+    
+        // 弹出堆顶元素
+        PartitionInfo* pop() {
+            if (heap.empty()) return nullptr;
+            PartitionInfo* topItem = heap[0];
+            PartitionInfo* last = heap.back();
+            heap[0] = last;
+            positions[last] = 0;
+            heap.pop_back();
+            positions.erase(topItem);
+            if (!heap.empty()) {
+                heapifyDown(0);
+            }
+            return topItem;
+        }
+    
+        // 当元素内部影响排序的 score 发生变化后，调用 update 调整其在堆中的位置
+        void update(PartitionInfo* item) {
+            auto it = positions.find(item);
+            if (it == positions.end()) return;  // 元素不在堆中
+            size_t index = it->second;
+            heapifyUp(index);
+            heapifyDown(index);
+        }
+    
+        bool empty() const {
+            return heap.empty();
+        }
+    };
+    
 
 class Disk {
 private:
@@ -16,15 +133,22 @@ private:
     int capacity;
     std::vector<int> storage;  // 存储单元，值为对象id
     int head_position;         // 磁头位置
+    bool head_free;          // 磁头状态
     int max_tokens_;
     int partition_size;        // 每个分区的大小
     std::vector<int> storage_partition_map;  // 存储单元所属的分区映射（索引 1~capacity）
     std::vector<PartitionInfo> partitions;  // 存储每个区间块的信息（起始索引和大小）
+    
+    // 新增：动态更新的堆，用于管理 partitions 的指针（支持动态更新）
+    DynamicPartitionHeap partition_heap;
+
+    TokenManager token_manager;
 
 
 public:
-    TokenManager* token_manager;
-    Disk() : id(0), capacity(0), head_position(1), max_tokens_(0) {}  // 添加默认构造函数
+    const PartitionInfo* part_p;  // 当前操作的区间块指针
+    bool last_ok;
+    Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
     bool write(int position, int object_id);
     void erase(int position);
@@ -32,9 +156,10 @@ public:
     bool is_free(int position) const;
     int get_id() const;
     int get_capacity() const;
+    std::vector<int> get_storage() const;
 
     int get_distance_to_head(int position) const; // 返回目标位置到磁头的距离（存储单元数（对象块数））== pass token消耗
-    std::pair<int,int> get_need_token_to_head(int position) const; // 返回到达目标的最优操作和token消耗。1-pass,0-read,-1-jump,-2-next-jump.
+    std::pair<int, int> get_need_token_to_head(int position) const; // 返回到达目标的最优操作和token消耗。1-pass,0-read,-1-jump,-2-next-jump.
     int get_need_token_continue_read(int position) const; // 返回到达目标连续read时token消耗(包含到达后的读取)
     int get_need_token_continue_pass(int position) const; // 返回到达目标连续pass时token消耗(包含到达后的读取)
     void refresh_token_manager();
@@ -53,7 +178,19 @@ public:
     // int get_partition_start(int partition_id) const; // 获取某个区间块的起始索引
     // int get_partition_end(int partition_id) const; // 获取某个区间块的结束索引
 
+    void reflash_partition_score();
+    // int update_partition_info(int partition_id, const Request & req);
+    void update_partition_info(int partition_id, float score);
     
+    bool head_is_free() const;
+    void set_head_busy();
+    void set_head_free();
+    // 新增方法：初始化 partitions 和堆（例如在构造函数中调用）
+    void initialize_partitions();
 
-
+    // 新增方法：获取堆顶（score 最高）的分区信息
+    const PartitionInfo* get_top_partition();
+    const PartitionInfo* get_pop_partition();
+    int get_cur_tokens() const;
+    void push_partition(PartitionInfo* partition);
 };

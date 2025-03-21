@@ -6,6 +6,8 @@ std::vector<Disk> disks;
 int T, M, N, V, G;
 TagManager tagmanager(0, 0);
 
+int current_max_request_id = 0; // 记录目前已处理的最大请求id
+
 void preprocess() {
     // 时间片，标签个数，磁盘个数，磁盘容量，token数量
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
@@ -177,7 +179,10 @@ void read_action(int t)
 // 获取读取请求
     int n_read;
     int request_id, object_id; 
-    std::unordered_set<int> finish_requests;
+    // std::unordered_set<int> finish_requests;
+    std::vector<int> finish_requests;
+    finish_requests.reserve(MAX_REQUEST_NUM >> 3);
+    // finish_requests.reserve(1000);
     scanf("%d", &n_read); // 要读的请求个数，读取几个对象
     // 添加新请求
     for (int i = 1; i <= n_read; i++) {
@@ -185,7 +190,8 @@ void read_action(int t)
         requests[request_id] = Request(request_id, object_id, t, objects[object_id].get_size()); // 创建request对象
         requests[request_id].link_to_previous(objects[object_id].get_last_request()); // 请求链表链接
         objects[object_id].update_last_request(request_id); // 更新对象最后新增的请求 不影响读取，只方便删除
-
+        if (request_id > current_max_request_id)
+            current_max_request_id = request_id;
     }
 
     // 每个磁头寻找要读的对象进行读操作  
@@ -198,8 +204,10 @@ void read_action(int t)
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
             bool has_request = false;
             // for(auto & req: requests){ // 遍历读取请求
-            for (auto it = requests.begin() + 1; it != requests.end(); ++it) {
-                auto & req = *it;
+            // for (auto it = requests.begin() + 1; it != requests.end(); ++it) 
+            for(int req_idx = 1; req_idx <= current_max_request_id; ++req_idx){
+                // auto & req = *it;
+                auto & req = requests[req_idx];
                 int object_id = req.get_object_id();
                 if(object_id == 0) break; // 目标不存在，则停止，请求遍历完了
                 int replica_idx = objects[object_id].is_in_disk(i); // 获取副本id
@@ -239,6 +247,7 @@ void read_action(int t)
             part_p = disks[i].part_p; // 继续上次区间
         }else{ // 上次读完了
             part_p = disks[i].get_pop_partition(); // 获取最高分区
+            
             if(part_p == disks[i].part_p){ // 还是原来分区
                 auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
                 if(disks[i].part_p->next == second_part_p && second_part_p->score > 0){ // 如果是下一个分区，先操作下一个分区(下一个分区有分数的话)
@@ -260,9 +269,10 @@ void read_action(int t)
         }
         
         // 取出存储了对象的位置vector
-        std::vector<int> storage_ = disks[i].get_storage();
+        // std::vector<int> storage_ = disks[i].get_storage();
+        const std::vector<int>& storage_ = disks[i].get_storage();
         std::vector<int> subStorage(storage_.begin() + part_p->start, storage_.begin() + part_p->start + part_p->size);
-        
+
         int idx = 0;
         if(!disks[i].last_ok){ // 如果上次没处理完
             if(head >= part_p->start && head < part_p->start + part_p->size){ // 磁头在区间内
@@ -318,7 +328,12 @@ void read_action(int t)
                         requests[req_id].set_is_done_list(block_idx);
                         if(requests[req_id].is_completed()){ // 请求完成,记录完成请求
                             if(!requests[req_id].is_up){
-                                finish_requests.insert(req_id);
+                                // finish_requests.insert(req_id);
+                                // 使用二分查找确保元素不重复
+                                auto it = std::lower_bound(finish_requests.begin(), finish_requests.end(), req_id);
+                                if (it == finish_requests.end() || *it != req_id) {
+                                    finish_requests.insert(it, req_id);
+                                }
                                 requests[req_id].is_up = true;
                                 // std::cerr << "req_id " << req_id << std::endl;
                             }
@@ -356,7 +371,11 @@ void read_action(int t)
                         requests[req_id].set_is_done_list(block_idx);
                         if(requests[req_id].is_completed()){ // 请求完成,记录完成请求
                             if(!requests[req_id].is_up){
-                                finish_requests.insert(req_id);
+                                // 使用二分查找确保元素不重复
+                                auto it = std::lower_bound(finish_requests.begin(), finish_requests.end(), req_id);
+                                if (it == finish_requests.end() || *it != req_id) {
+                                    finish_requests.insert(it, req_id);
+                                }
                                 requests[req_id].is_up = true;
                                 // std::cerr << "req_id " << req_id << std::endl;
                             }
@@ -408,9 +427,8 @@ void read_action(int t)
     }
     // 磁头操作完毕
 // 读取完成，输出读取完成的请求
-    int finish_num = finish_requests.size();
     // std::cerr << "finish_num " << finish_num << std::endl;
-    printf("%d\n", finish_num);
+    printf("%d\n", finish_requests.size());
     for(const auto & req_id: finish_requests){
         // std::cerr << "req_id " << req_id << std::endl;
         printf("%d\n", req_id);

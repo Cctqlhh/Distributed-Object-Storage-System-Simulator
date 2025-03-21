@@ -147,6 +147,8 @@ private:
 
 public:
     const PartitionInfo* part_p;  // 当前操作的区间块指针
+    
+
     bool last_ok;
     Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
@@ -193,4 +195,24 @@ public:
     const PartitionInfo* get_pop_partition();
     int get_cur_tokens() const;
     void push_partition(PartitionInfo* partition);
+
+    // // 优化4：缓存最高分区
+    // const PartitionInfo* cached_top_partition;
+    // float cached_top_score;
+    // const PartitionInfo* get_pop_partition() {
+    //     if (cached_top_partition && cached_top_score > 0) {
+    //         return cached_top_partition;
+    //     }
+        
+    //     // 找到最高分区
+    //     cached_top_partition = nullptr;
+    //     cached_top_score = -1;
+    //     for (const auto& p : partitions) {
+    //         if (p.score > cached_top_score) {
+    //             cached_top_score = p.score;
+    //             cached_top_partition = &p;
+    //         }
+    //     }
+    //     return cached_top_partition;
+    // }
 };

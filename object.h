@@ -16,6 +16,8 @@ private:
     bool is_deleted;
     int request_num;
 
+    std::vector<int> active_requests;           // 存储当前对象正在处理的请求id
+
 public:
     Object(int id = 0, int size = 0);
     bool write_replica(int replica_idx, Disk& disk);
@@ -39,4 +41,19 @@ public:
     void add_request();
     void reduce_request();
     int get_request_num() const;
+
+    void add_active_request(int request_id) {
+        active_requests.push_back(request_id);
+    }
+
+    std::vector<int>& get_active_requests() {
+        return active_requests;
+    }
+
+    void remove_completed_request(int request_id) {
+        auto it = std::find(active_requests.begin(), active_requests.end(), request_id);
+        if (it != active_requests.end()) {
+            active_requests.erase(it);
+        }
+    }
 };

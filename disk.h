@@ -36,13 +36,13 @@ class DynamicPartitionHeap {
         // 使用 vector 存储堆中元素（指向 PartitionInfo 对象的指针）
         std::vector<PartitionInfo*> heap;
         // 使用哈希表记录每个元素在 heap 中的索引，便于快速定位更新位置
-        std::unordered_map<PartitionInfo*, size_t> positions;
+        std::unordered_map<PartitionInfo*, size_t> position_map;
     
-        // 交换堆中两个元素的位置，并更新 positions 映射
+        // 交换堆中两个元素的位置，并更新 position_map 映射
         void swapNodes(size_t i, size_t j) {
             std::swap(heap[i], heap[j]);
-            positions[heap[i]] = i;
-            positions[heap[j]] = j;
+            position_map[heap[i]] = i;
+            position_map[heap[j]] = j;
         }
     
         // 自下而上调整堆（上浮操作），用于元素 score 增加时
@@ -87,7 +87,7 @@ class DynamicPartitionHeap {
         // 插入新元素
         void push(PartitionInfo* item) {
             heap.push_back(item);
-            positions[item] = heap.size() - 1;
+            position_map[item] = heap.size() - 1;
             heapifyUp(heap.size() - 1);
         }
     
@@ -103,9 +103,9 @@ class DynamicPartitionHeap {
             PartitionInfo* topItem = heap[0];
             PartitionInfo* last = heap.back();
             heap[0] = last;
-            positions[last] = 0;
+            position_map[last] = 0;
             heap.pop_back();
-            positions.erase(topItem);
+            position_map.erase(topItem);
             if (!heap.empty()) {
                 heapifyDown(0);
             }
@@ -114,8 +114,8 @@ class DynamicPartitionHeap {
     
         // 当元素内部影响排序的 score 发生变化后，调用 update 调整其在堆中的位置
         void update(PartitionInfo* item) {
-            auto it = positions.find(item);
-            if (it == positions.end()) return;  // 元素不在堆中
+            auto it = position_map.find(item);
+            if (it == position_map.end()) return;  // 元素不在堆中
             size_t index = it->second;
             heapifyUp(index);
             heapifyDown(index);
@@ -195,24 +195,4 @@ public:
     const PartitionInfo* get_pop_partition();
     int get_cur_tokens() const;
     void push_partition(PartitionInfo* partition);
-
-    // // 优化4：缓存最高分区
-    // const PartitionInfo* cached_top_partition;
-    // float cached_top_score;
-    // const PartitionInfo* get_pop_partition() {
-    //     if (cached_top_partition && cached_top_score > 0) {
-    //         return cached_top_partition;
-    //     }
-        
-    //     // 找到最高分区
-    //     cached_top_partition = nullptr;
-    //     cached_top_score = -1;
-    //     for (const auto& p : partitions) {
-    //         if (p.score > cached_top_score) {
-    //             cached_top_score = p.score;
-    //             cached_top_partition = &p;
-    //         }
-    //     }
-    //     return cached_top_partition;
-    // }
 };

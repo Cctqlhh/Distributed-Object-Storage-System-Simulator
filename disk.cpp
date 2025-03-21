@@ -180,16 +180,18 @@ const PartitionInfo& Disk::get_partition_info(int partition_id) const {
 }
 
 void Disk::reflash_partition_score(){
-    for (auto it = partitions.begin() + 1; it != partitions.end(); ++it) {
-        it->score = 0;
-    } 
+    for (auto& partition : partitions) {
+        partition.score = 0.0f;
+    }
     initialize_partitions();
 }
 void Disk::update_partition_info(int partition_id, float score){
-    PartitionInfo& p = partitions[partition_id];
-    p.score += score;
+    // if (partition_id <= 0 || partition_id > partitions.size() - 1 || score <= 0) return;
+    partitions[partition_id].score += score;
     // 调用动态堆 update 操作，调整该分区在堆中的位置
-    partition_heap.update(&p);
+    partition_heap.update(&partitions[partition_id]);
+
+
     // partitions[partition_id].score = req.get_size_score() * req.get_time_score();
     // partitions[partition_id].score = req.get_size_score() * req.compute_time_score_update(t);
     // return 0;

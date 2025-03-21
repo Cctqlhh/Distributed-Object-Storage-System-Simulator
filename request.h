@@ -14,9 +14,10 @@ private:
     float time_score;
     float size_score;
 
+    // std::vector<bool> is_done_list;
+    std::vector<uint64_t> is_done_bitmap; // 使用位图替代布尔数组
     int rest; // 剩余未读取的块数
 
-    std::vector<bool> is_done_list;
 
 public:
     bool is_up;

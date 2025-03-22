@@ -32,6 +32,7 @@ public:
     float compute_time_score_update(int t) const;
     float get_size_score() const;
     float get_time_score() const;
+    float get_score(int t) const;
     
     void set_is_done_list(int block_idx);
 };

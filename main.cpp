@@ -199,38 +199,57 @@ void read_action(int t)
             // // 遍历硬盘所有分区对应的所有对象 请求
             // // 遍历硬盘有请求的分区
             // // 每个分区的有请求的对象
-            // for(int partition_id = 1; partition_id <= PARTITION_ALLOCATION_THRESHOLD; ++partition_id){
-            //     // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
-            //     int start = disks[i].get_partition_start(partition_id);
-            //     int size = disks[i].get_partition_size(partition_id);
+            const std::vector<int>& storage_ = disks[i].get_storage(); // 获取硬盘存储单元
+            for(int partition_id = 1; partition_id <= PARTITION_ALLOCATION_THRESHOLD; ++partition_id){
+                // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
+                int start = disks[i].get_partition_start(partition_id);
+                int size = disks[i].get_partition_size(partition_id);
+                const int* subStorage = storage_.data() + start; // 获取分区的存储单元
+            
+                float score = 0;
+                // 遍历分区的所有存储单元  // 后续替换为直接遍历分区的所有对象
+                for(int idx=0; idx < size; ++idx){
+                    // if(idx > 0 && subStorage[idx-1] == subStorage[idx]) continue; // 跳过连续相同的存储单元(对象)
+                    int object_id = subStorage[idx];
+                    if(object_id == 0) continue; // 目标不存在，则跳过
+                     // 假设连续存储的,获取size之后用来跳过(后续调整为直接遍历分区的所有对象,不需要考虑size)
+                    idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
 
-            //     // disks[i].partitions[part_id].score =  ;
-            //     float score = 0;
-            //     disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
-            // }
-//////////////////////////
-            for(int req_idx = 1; req_idx <= current_max_request_id; ++req_idx){
-                // auto & req = *it;
-                auto & req = requests[req_idx];
-                int object_id = req.get_object_id();
-                if(object_id == 0) break; // 目标不存在，则停止，请求遍历完了
-                
-                // 检查请求是否已完成
-                if(req.is_completed()) continue;
-
-                int replica_idx = objects[object_id].is_in_disk(i); // 获取副本id
-                if(replica_idx == 0) continue; //副本id为0,目标不在当前硬盘上，则看下一个
-                // 目标存在，且在该硬盘上有副本，更新硬盘上该目标请求的信息
-
-                // int partition_id = objects[object_id].get_partition_id(replica_idx); // 获取副本所在分区
-                int partition_id = disks[i].get_partition_id(objects[object_id].get_storage_position(replica_idx, 1)); // 获取副本所在分区
-                
-                float score = req.get_size_score();
-                if(score <= 0) continue; // 跳过分数为0的请求
-                score *= req.compute_time_score_update(t); 
+                    // 目标存在，获取request信息 
+                    auto& active_reqs = objects[object_id].get_active_requests(); // 获取对象的活跃请求列表
+                    for(size_t i=0; i<active_reqs.size(); ++i){ 
+                        auto & req = requests[active_reqs[i]];
+                        if(req.is_up || req.is_completed()){ // 跳过已经完成的请求
+                            ++i;
+                            continue;
+                        }
+                        score += req.get_score(t);
+                    }
+                }
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
             }
+//////////////////////////
+            // for(int req_idx = 1; req_idx <= current_max_request_id; ++req_idx){
+            //     // auto & req = *it;
+            //     auto & req = requests[req_idx];
+            //     int object_id = req.get_object_id();
+            //     if(object_id == 0) break; // 目标不存在，则停止，请求遍历完了
+                
+            //     // 检查请求是否已完成
+            //     if(req.is_completed()) continue;
+
+            //     int replica_idx = objects[object_id].is_in_disk(i); // 获取副本id
+            //     if(replica_idx == 0) continue; //副本id为0,目标不在当前硬盘上，则看下一个
+            //     // 目标存在，且在该硬盘上有副本，更新硬盘上该目标请求的信息
+
+            //     // int partition_id = objects[object_id].get_partition_id(replica_idx); // 获取副本所在分区
+            //     int partition_id = disks[i].get_partition_id(objects[object_id].get_storage_position(replica_idx, 1)); // 获取副本所在分区
+                
+            //     float score = req.get_score(t);
+            //     if(!has_request && score > 0) has_request = true;
+            //     disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
+            // }
 
             // 若无请求?
             if(!has_request) {

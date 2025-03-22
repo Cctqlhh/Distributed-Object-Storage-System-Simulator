@@ -40,26 +40,21 @@ void Request::set_object_id(int id) {
 }
 
 float Request::compute_time_score_update(int t) const {
-    if(is_done) return 0;
+    if(is_done || is_up) return 0.0f;
     int time_ = t - timestamp;
-    // if(time_ <= 10){
-    //     return 1.0 - 0.005 * time_;
-    // }
-    // else if(time_ <= 105){
-    //     return 1.05 - 0.01 * time_;
-    // }
-    // else return 0;
-    // 使用条件运算符简化逻辑
     return (time_ <= 10) ? (1.0f - 0.005f * time_) : 
            (time_ <= 105) ? (1.05f - 0.01f * time_) : 0.0f;
 }
 
 float Request::get_size_score() const{
-    if(is_done) return 0;
     return size_score;
 }
 float Request::get_time_score() const{
     return time_score;
+}
+float Request::get_score(int t) const{
+    float score = compute_time_score_update(t);
+    return score * size_score;
 }
 
 void Request::set_is_done_list(int block_idx){

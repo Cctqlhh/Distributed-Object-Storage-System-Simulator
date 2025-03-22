@@ -11,6 +11,9 @@
 #include <iostream>
 #include <limits>
 
+#include <thread>
+#include <mutex>
+
 // 前向声明
 class Disk;
 class Request;

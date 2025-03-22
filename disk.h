@@ -29,7 +29,7 @@ struct PartitionInfo {
     }
     // 重载 == 运算符，用于判断两个 PartitionInfo 对象是否相等
     bool operator==(const PartitionInfo& other) const {
-        return start == other.start && size == other.size;
+        return score == other.score;
     }
 };
 

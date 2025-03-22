@@ -187,7 +187,7 @@ void Disk::reflash_partition_score(){
 }
 void Disk::update_partition_info(int partition_id, float score){
     // if (partition_id <= 0 || partition_id > partitions.size() - 1 || score <= 0) return;
-    partitions[partition_id].score += score;
+    partitions[partition_id].score = score;
     // 调用动态堆 update 操作，调整该分区在堆中的位置
     partition_heap.update(&partitions[partition_id]);
 

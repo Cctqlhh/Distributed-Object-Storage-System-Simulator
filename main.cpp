@@ -4,17 +4,17 @@ std::vector<Request> requests(MAX_REQUEST_NUM);
 std::vector<Object> objects(MAX_OBJECT_NUM);
 std::vector<Disk> disks;
 int T, M, N, V, G;
-TagManager tagmanager(0, 0);
+TagManager tagmanager(0, 0, 0);
 
 int current_max_request_id = 0; // 记录目前已处理的最大请求id
 
 void preprocess() {
     // T时间片，M标签个数，N磁盘个数，V磁盘容量，Gtoken数量
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
-    // 初始化全局 TagManager
-    tagmanager = TagManager(M, N);
     // 计算时间片组数
     int slicing_count = (T - 1) / FRE_PER_SLICING + 1;
+    // 初始化全局 TagManager
+    tagmanager = TagManager(M, N, slicing_count);
     // 数据接收
     // 存储时间片删除、写入、读取的数据
     std::vector<std::vector<int>> fre_del(M + 1, std::vector<int>(slicing_count + 1, 0));
@@ -88,6 +88,7 @@ void preprocess() {
 
     // 调用全局 tagmanager 进行标签分配
     tagmanager.allocate_tag_storage(sum, conflict_matrix, disks);
+    tagmanager.compute_delete_prob(sum, fre_del); // 计算删除概率
 
     // 预处理结束
     printf("OK\n");
@@ -147,9 +148,9 @@ void write_action(int t)
     int n_write;
     scanf("%d", &n_write); // 要写的对象个数
     for (int i = 1; i <= n_write; i++) { // 要写的对象
-        int id, size;
-        scanf("%d%d%*d", &id, &size); // 对象id,对象大小,对象标签(未保存)
-        objects[id] = Object(id, size);
+        int id, size, tag;
+        scanf("%d%d%d", &id, &size, &tag); // 对象id,对象大小,对象标签(未保存)
+        objects[id] = Object(id, size, tag);
         for (int j = 1; j <= REP_NUM; j++) { // 对象的第j个副本
         
             int disk_id = (id + j) % N + 1;
@@ -214,6 +215,7 @@ void read_action(int t)
 
     // 每个磁头寻找要读的对象进行读操作  
     for(int i=1; i<=N;){
+        assert(i <= N && i >= 1);
         // 维护已有请求 应当磁头空闲时候进行维护
         if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
@@ -251,29 +253,6 @@ void read_action(int t)
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
             }
-//////////////////////////
-            // for(int req_idx = 1; req_idx <= current_max_request_id; ++req_idx){
-            //     // auto & req = *it;
-            //     auto & req = requests[req_idx];
-            //     int object_id = req.get_object_id();
-            //     if(object_id == 0) break; // 目标不存在，则停止，请求遍历完了
-                
-            //     // 检查请求是否已完成
-            //     if(req.is_completed()) continue;
-
-            //     int replica_idx = objects[object_id].is_in_disk(i); // 获取副本id
-            //     if(replica_idx == 0) continue; //副本id为0,目标不在当前硬盘上，则看下一个
-            //     // 目标存在，且在该硬盘上有副本，更新硬盘上该目标请求的信息
-
-            //     // int partition_id = objects[object_id].get_partition_id(replica_idx); // 获取副本所在分区
-            //     int partition_id = disks[i].get_partition_id(objects[object_id].get_storage_position(replica_idx, 1)); // 获取副本所在分区
-                
-            //     float score = req.get_score(t);
-            //     if(!has_request && score > 0) has_request = true;
-            //     disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
-            // }
-
-            // 若无请求?
             if(!has_request) {
                 printf("#\n"); // 当前硬盘无请求，不操作
                 i++;
@@ -299,6 +278,7 @@ void read_action(int t)
                 continue;
             }
             if(part_p == disks[i].part_p){ // 还是原来分区
+                assert(disks[i].part_p);
                 auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
                 if(disks[i].part_p->next == second_part_p && second_part_p->score > 0){ // 如果是下一个分区，先操作下一个分区(下一个分区有分数的话)
                     disks[i].part_p = second_part_p;

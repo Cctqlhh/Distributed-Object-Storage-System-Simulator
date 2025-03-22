@@ -9,6 +9,7 @@ class Object {
 private:
     int object_id;
     int size;
+    int tag_id;
     std::vector<int> replica_disks;             // 副本所在磁盘ID
     std::vector<std::vector<int>> unit_pos;     // 每个副本的存储单元位置 3个副本，每个副本最多存储size个块
     std::vector<int> partition_id;              // 每个副本的存储单元所属的分区编号
@@ -19,7 +20,7 @@ private:
     std::vector<int> active_requests;           // 存储当前对象正在处理的请求id
 
 public:
-    Object(int id = 0, int size = 0);
+    Object(int id = 0, int size = 0, int tag_id = 0);
     bool write_replica(int replica_idx, Disk& disk);
     void delete_replica(int replica_idx, Disk& disk);
     
@@ -28,6 +29,9 @@ public:
     void update_last_request(int request_id); //更新最后一次读取该对象的请求id
     int get_last_request() const; //读取最后一次读取该对象的请求id
     int get_size() const; //读取对象大小
+    int get_tag_id() const{
+        return tag_id;
+    } //读取对象的标签id
     void set_replica_disk(int replica_idx, int disk_id); //设置某个副本的磁盘id
     bool is_valid_replica(int replica_idx) const; // 判断replica_idx是否有效（没啥用）
 

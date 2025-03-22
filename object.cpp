@@ -1,9 +1,10 @@
 #include "object.h"
 #include <cassert>
 
-Object::Object(int id, int size) 
+Object::Object(int id, int size, int tag_id) 
     : object_id(id)
     , size(size)
+    , tag_id(tag_id)
     , last_request_point(0)
     , is_deleted(false)
     , replica_disks(REP_NUM + 1)

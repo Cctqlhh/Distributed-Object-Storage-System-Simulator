@@ -2,11 +2,12 @@
 #include <algorithm>
 #include <limits>
 
-TagManager::TagManager(int M, int N) {
-    tag_disk_mapping.resize(M + 1, std::vector<int>(REP_NUM, -1));  // 初始化标签磁盘映射
-    tag_partition_mapping.resize(M + 1, std::vector<int>(REP_NUM, 0));  // 初始化标签区间块映射
-    disk_partition_usage.resize(N + 1, std::vector<int>(DISK_PARTITIONS, -1)); // -1 表示空闲
-}
+TagManager::TagManager(int M, int N, int slicing_count)
+    :tag_delete_prob(M + 1, std::vector<double>(REP_NUM, 0.0f)){
+        tag_disk_mapping.resize(M + 1, std::vector<int>(REP_NUM, -1));  // 初始化标签磁盘映射
+        tag_partition_mapping.resize(M + 1, std::vector<int>(REP_NUM, 0));  // 初始化标签区间块映射
+        disk_partition_usage.resize(N + 1, std::vector<int>(DISK_PARTITIONS, -1)); // -1 表示空闲
+    }
 
 void TagManager::allocate_tag_storage(const std::vector<std::vector<int>>& sum, 
                                       const std::vector<std::vector<int>>& conflict_matrix,
@@ -85,3 +86,14 @@ void TagManager::allocate_final_storage(std::vector<Disk>& disks) {
         }
     }
 }
+
+void TagManager::compute_delete_prob(const std::vector<std::vector<int>>& sum, 
+    const std::vector<std::vector<int>>& fre_del){
+        for (int i = 1; i <= tag_delete_prob.size()-1; i++)
+        {
+            for (int j = 1; j <= tag_delete_prob[0].size()-1; j++)
+            {
+                tag_delete_prob[i][j] = sum[i][j] > 0 ? (double)fre_del[i][j] / sum[i][j] : 0;
+            }
+        }
+    }

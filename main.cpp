@@ -180,7 +180,7 @@ void read_action(int t)
     std::vector<int> finish_requests;
     scanf("%d", &n_read); // 要读的请求个数，读取几个对象
     // 添加新请求
-    for (int i = 1; i <= n_read; i++) {
+    for (int i = 1; i <= n_read; i++) { // 可以在请求进来的时候 给硬盘分区记录 !请求变化!,新增请求和删除的请求id,然后在需要更新的时候按这个更新
         scanf("%d%d", &request_id, &object_id); // 请求id,对象id
         requests[request_id] = Request(request_id, object_id, t, objects[object_id].get_size()); // 创建request对象
         requests[request_id].link_to_previous(objects[object_id].get_last_request()); // 请求链表链接
@@ -211,10 +211,10 @@ void read_action(int t)
 
                 // int partition_id = objects[object_id].get_partition_id(replica_idx); // 获取副本所在分区
                 int partition_id = disks[i].get_partition_id(objects[object_id].get_storage_position(replica_idx, 1)); // 获取副本所在分区
-
-                float score = req.compute_time_score_update(t); 
+                
+                float score = req.get_size_score();
                 if(score <= 0) continue; // 跳过分数为0的请求
-                score *= req.get_size_score();
+                score *= req.compute_time_score_update(t); 
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
             }
@@ -296,12 +296,14 @@ void read_action(int t)
                     auto& active_reqs = objects[object_id].get_active_requests();
                     for(size_t i=0; i<active_reqs.size();){
                         int req_id = active_reqs[i];
+                        if(requests[req_id].is_up){
+                            ++i;
+                            continue;
+                        }
                         requests[req_id].set_is_done_list(block_idx);
                         if(requests[req_id].is_completed()){
-                            if(!requests[req_id].is_up){
-                                finish_requests.push_back(req_id);  // 直接追加，无需二分查找
-                                requests[req_id].is_up = true;
-                            }
+                            finish_requests.push_back(req_id);  // 直接追加，无需二分查找
+                            requests[req_id].is_up = true;
                             active_reqs[i] = active_reqs.back();
                             active_reqs.pop_back();
                         } else {
@@ -334,12 +336,14 @@ void read_action(int t)
                     auto& active_reqs = objects[object_id].get_active_requests();
                     for(size_t i=0; i<active_reqs.size();){
                         int req_id = active_reqs[i];
+                        if(requests[req_id].is_up){
+                            ++i;
+                            continue;
+                        }
                         requests[req_id].set_is_done_list(block_idx);
                         if(requests[req_id].is_completed()){
-                            if(!requests[req_id].is_up){
-                                finish_requests.push_back(req_id);  // 直接追加，无需二分查找
-                                requests[req_id].is_up = true;
-                            }
+                            finish_requests.push_back(req_id);  // 直接追加，无需二分查找
+                            requests[req_id].is_up = true;
                             active_reqs[i] = active_reqs.back();
                             active_reqs.pop_back();
                         } else {

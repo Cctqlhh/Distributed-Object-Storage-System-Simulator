@@ -9,7 +9,7 @@ TagManager tagmanager(0, 0);
 int current_max_request_id = 0; // 记录目前已处理的最大请求id
 
 void preprocess() {
-    // 时间片，标签个数，磁盘个数，磁盘容量，token数量
+    // T时间片，M标签个数，N磁盘个数，V磁盘容量，Gtoken数量
     scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
     // 初始化全局 TagManager
     tagmanager = TagManager(M, N);
@@ -116,7 +116,6 @@ void delete_action(int t)
 
     // 预分配空间存储未完成的请求ID
     std::vector<int> aborted_requests;
-
     for (int i = 1; i <= n_delete; i++) {
         int id = _id[i];
         int current_id = objects[id].get_last_request();
@@ -170,6 +169,29 @@ void write_action(int t)
     }
 
     fflush(stdout);
+}
+
+void read_update_request_info(int disk_id, int object_id, int unit_pos, std::vector<int>& finish_requests){
+    if(object_id == 0) return;
+    // 确定是目标的哪一块
+    int block_idx = objects[object_id].get_which_unit(disk_id, unit_pos);
+    auto& active_reqs = objects[object_id].get_active_requests();
+    for(size_t i=0; i<active_reqs.size();){
+        int req_id = active_reqs[i];
+        if(requests[req_id].is_up){
+            ++i;
+            continue;
+        }
+        requests[req_id].set_is_done_list(block_idx);
+        if(requests[req_id].is_completed()){
+            finish_requests.push_back(req_id);  // 直接追加，无需二分查找
+            requests[req_id].is_up = true;
+            active_reqs[i] = active_reqs.back();
+            active_reqs.pop_back();
+        } else {
+            ++i;
+        }
+    }
 }
 
 void read_action(int t)
@@ -323,26 +345,8 @@ void read_action(int t)
                     }
                 }
                 if(!stop){ // 成功读取该块
-                    // 确定是目标的哪一块
-                    int block_idx = objects[object_id].get_which_unit(i, part_p->start + idx);
-                    
-                    auto& active_reqs = objects[object_id].get_active_requests();
-                    for(size_t i=0; i<active_reqs.size();){
-                        int req_id = active_reqs[i];
-                        if(requests[req_id].is_up){
-                            ++i;
-                            continue;
-                        }
-                        requests[req_id].set_is_done_list(block_idx);
-                        if(requests[req_id].is_completed()){
-                            finish_requests.push_back(req_id);  // 直接追加，无需二分查找
-                            requests[req_id].is_up = true;
-                            active_reqs[i] = active_reqs.back();
-                            active_reqs.pop_back();
-                        } else {
-                            ++i;
-                        }
-                    }
+                    // 成功读取, 更新相关的请求信息
+                    read_update_request_info(i, object_id, part_p->start + idx, finish_requests);
                 }else{
                     break; // token数量不足，结束该硬盘操作
                 }
@@ -360,29 +364,9 @@ void read_action(int t)
                 }
                 if(stop) break;
                 if(disks[i].read()){ // 然后再读取
-                
                     printf("r"); //read成功，打印read指令
                     // 成功读取该块，记录读取进度
-                    // 确定是目标的哪一块
-                    int block_idx = objects[object_id].get_which_unit(i, part_p->start + idx);
-                    
-                    auto& active_reqs = objects[object_id].get_active_requests();
-                    for(size_t i=0; i<active_reqs.size();){
-                        int req_id = active_reqs[i];
-                        if(requests[req_id].is_up){
-                            ++i;
-                            continue;
-                        }
-                        requests[req_id].set_is_done_list(block_idx);
-                        if(requests[req_id].is_completed()){
-                            finish_requests.push_back(req_id);  // 直接追加，无需二分查找
-                            requests[req_id].is_up = true;
-                            active_reqs[i] = active_reqs.back();
-                            active_reqs.pop_back();
-                        } else {
-                            ++i;
-                        }
-                    }
+                    read_update_request_info(i, object_id, part_p->start + idx, finish_requests);
                 }
                 else {
                     printf("#\n"); //token数量不足，read失败，打印#指令
@@ -399,6 +383,9 @@ void read_action(int t)
             else if (act_token.first == -2){ // read 2jump
                 while(disks[i].read()){ // 尽量读
                     printf("r"); //read成功，打印read指令
+                    int temp_pos = head > 1 ? head-1 : V;
+                    // int temp_obj_id = storage_[temp_pos];
+                    read_update_request_info(i, storage_[temp_pos], temp_pos, finish_requests);
                 }
                 printf("#\n"); //token数量不足，read失败，打印#指令
                 stop = true;

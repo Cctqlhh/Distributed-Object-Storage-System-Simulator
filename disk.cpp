@@ -41,44 +41,44 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     initialize_partitions();
 }
 
-bool Disk::write(int position, int object_id) {
-    assert(position > 0 && position <= capacity);
-    storage[position] = object_id;
-    return true;
-}
+// bool Disk::write(int position, int object_id) {
+//     assert(position > 0 && position <= capacity);
+//     storage[position] = object_id;
+//     return true;
+// }
 
-void Disk::erase(int position) {
-    assert(position > 0 && position <= capacity);
-    storage[position] = 0;
-}
+// void Disk::erase(int position) {
+//     assert(position > 0 && position <= capacity);
+//     storage[position] = 0;
+// }
 
-int Disk::get_head_position() const {
-    return head_position;
-}
+// int Disk::get_head_position() const {
+//     return head_position;
+// }
 
-bool Disk::is_free(int position) const {
-    assert(position > 0 && position <= capacity);
-    return storage[position] == 0;
-}
+// bool Disk::is_free(int position) const {
+//     assert(position > 0 && position <= capacity);
+//     return storage[position] == 0;
+// }
 
-int Disk::get_id() const {
-    return id;
-}
+// int Disk::get_id() const {
+//     return id;
+// }
 
-int Disk::get_capacity() const {
-    return capacity;
-}
+// int Disk::get_capacity() const {
+//     return capacity;
+// }
 
-std::vector<int> Disk::get_storage() const{
-    return storage;
-}
+// std::vector<int> Disk::get_storage() const{
+//     return storage;
+// }
 
-int Disk::get_distance_to_head(int position) const {
-    assert(position > 0 && position <= capacity);
-    if(position < head_position)
-        return capacity - head_position + position;
-    else return position - head_position;
-}
+// int Disk::get_distance_to_head(int position) const {
+//     assert(position > 0 && position <= capacity);
+//     if(position < head_position)
+//         return capacity - head_position + position;
+//     else return position - head_position;
+// }
 
 
 std::pair<int,int> Disk::get_need_token_to_head(int position) const {
@@ -164,20 +164,20 @@ int Disk::read(){
     else return 0;
 }
 
-int Disk::get_partition_id(int position) const {
-    assert(position > 0 && position <= capacity);
-    return storage_partition_map[position];
-}
+// int Disk::get_partition_id(int position) const {
+//     assert(position > 0 && position <= capacity);
+//     return storage_partition_map[position];
+// }
 
 
-int Disk::get_partition_size() const {
-    return partition_size;
-}
+// int Disk::get_partition_size() const {
+//     return partition_size;
+// }
 
-const PartitionInfo& Disk::get_partition_info(int partition_id) const {
-    assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
-    return partitions[partition_id];
-}
+// const PartitionInfo& Disk::get_partition_info(int partition_id) const {
+//     assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
+//     return partitions[partition_id];
+// }
 
 void Disk::reflash_partition_score(){
     for (auto& partition : partitions) {
@@ -197,17 +197,17 @@ void Disk::update_partition_info(int partition_id, float score){
     // return 0;
 }
 
-bool Disk::head_is_free() const{
-    return head_free;
-}
+// bool Disk::head_is_free() const{
+//     return head_free;
+// }
 
-void Disk::set_head_busy(){
-    head_free = false;
-}
+// void Disk::set_head_busy(){
+//     head_free = false;
+// }
 
-void Disk::set_head_free(){
-    head_free = true;
-}
+// void Disk::set_head_free(){
+//     head_free = true;
+// }
 
 // 新增方法：初始化 partitions 和堆（例如在构造函数中调用）
 void Disk::initialize_partitions() {
@@ -229,9 +229,9 @@ const PartitionInfo* Disk::get_pop_partition() {
     return partition_heap.pop();
 }
 
-int Disk::get_cur_tokens() const {
-    return token_manager.get_current_tokens();
-}
+// int Disk::get_cur_tokens() const {
+//     return token_manager.get_current_tokens();
+// }
 
 void Disk::push_partition(PartitionInfo* partition) {
     partition_heap.push(partition);

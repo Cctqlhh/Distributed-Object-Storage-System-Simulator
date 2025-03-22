@@ -196,6 +196,19 @@ void read_action(int t)
         if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
             bool has_request = false;
+            // // 遍历硬盘所有分区对应的所有对象 请求
+            // // 遍历硬盘有请求的分区
+            // // 每个分区的有请求的对象
+            // for(int partition_id = 1; partition_id <= PARTITION_ALLOCATION_THRESHOLD; ++partition_id){
+            //     // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
+            //     int start = disks[i].get_partition_start(partition_id);
+            //     int size = disks[i].get_partition_size(partition_id);
+
+            //     // disks[i].partitions[part_id].score =  ;
+            //     float score = 0;
+            //     disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
+            // }
+//////////////////////////
             for(int req_idx = 1; req_idx <= current_max_request_id; ++req_idx){
                 // auto & req = *it;
                 auto & req = requests[req_idx];
@@ -218,6 +231,7 @@ void read_action(int t)
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
             }
+
             // 若无请求?
             if(!has_request) {
                 printf("#\n"); // 当前硬盘无请求，不操作

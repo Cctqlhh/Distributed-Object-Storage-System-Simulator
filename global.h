@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <iostream>
+#include <limits>
 
 // 前向声明
 class Disk;

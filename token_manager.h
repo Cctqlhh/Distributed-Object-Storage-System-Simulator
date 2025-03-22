@@ -19,12 +19,11 @@ public:
         prev_read_cost_(0),
         last_is_read_(false) {}
     
+    ~TokenManager() = default;
     // 刷新令牌（每个时间片调用）
     void refresh(){
         current_tokens_ = max_tokens_;
     }
-    ~TokenManager() = default;
-
     // 尝试消耗指定磁头的令牌
     bool try_consume(int tokens) {
         if (current_tokens_ >= tokens) {

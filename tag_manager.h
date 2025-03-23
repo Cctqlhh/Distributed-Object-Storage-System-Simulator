@@ -79,6 +79,13 @@ public:
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
     std::set<std::pair<int, int>> three_tag_partitions;
 
+    // 4个及以上标签的磁盘id，区间块id
+    // 加快兜底策略遍历速度
+    // 当标签使用新区间块时更新，在删除干净整个标签时更新
+    std::set<std::pair<int, int>> more_tag_partitions;  
+
+
+
     TagManager(int M, int N);  
 
     // 计算每个标签的初始分配磁盘和所需区间块数量

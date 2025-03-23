@@ -187,6 +187,6 @@ void Disk::reduce_residual_capacity(int partition_id, int size) {
 void Disk::increase_residual_capacity(int partition_id, int size) {
     assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
     residual_capacity[partition_id] += size;
-    std::cerr<< "-------------------------: "<< (residual_capacity[partition_id] <= initial_max_capacity[partition_id]) << std::endl;
-    // assert(residual_capacity[partition_id] <= initial_max_capacity[partition_id] && "The deletion operation caused the remaining capacity to exceed the maximum capacity");
+    // std::cerr<< "-------------------------: "<< (residual_capacity[partition_id] <= initial_max_capacity[partition_id]) << std::endl;
+    assert(residual_capacity[partition_id] <= initial_max_capacity[partition_id] && "The deletion operation caused the remaining capacity to exceed the maximum capacity");
 }

@@ -1,13 +1,6 @@
 #pragma once
 #include "global.h"
-// #include <vector>
-// #include <queue>
-// #include <memory>
-// #include <unordered_map>
 #include "token_manager.h"
-// #include "request.h"
-
-#define DISK_PARTITIONS 20  // 定义硬盘分区数
 
 // 记录磁盘区间块的起始索引和大小
 struct PartitionInfo {
@@ -145,19 +138,26 @@ class Disk {
 private:
     int id;
     int capacity;
+    // 在对象写入时更新
     std::vector<int> storage;  // 存储单元，值为对象id
     int head_position;         // 磁头位置
     bool head_free;          // 磁头状态
     int max_tokens_;
     int partition_size;        // 每个分区的大小(一般)
+
     std::vector<int> storage_partition_map;  // 存储单元所属的分区映射（索引 1~capacity）
-    std::vector<PartitionInfo> partitions;  // 存储每个区间块的信息（起始索引和大小）
     
+    std::vector<PartitionInfo> partitions;  // 存储每个区间块的信息（起始索引和大小）
+
+    // 所有区间块的初始最大容量
+    std::vector<int> initial_max_capacity;
     // 新增：动态更新的堆，用于管理 partitions 的指针（支持动态更新）
     DynamicPartitionHeap partition_heap;
 
     TokenManager token_manager;
 
+    // 在对象写入区间块时更新
+    std::vector<int> residual_capacity;     // 存储每个区间块的剩余容量，初始化为初始最大容量size
 
 public:
     const PartitionInfo* part_p;  // 当前操作的区间块指针
@@ -165,6 +165,7 @@ public:
     bool last_ok;
     Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
+
 
     bool write(int position, int object_id) {
         storage[position] = object_id;
@@ -197,6 +198,7 @@ public:
         else return position - head_position;
     }
     std::pair<int, int> get_need_token_to_head(int position) const; // 返回到达目标的最优操作和token消耗。1-pass,0-read,-1-jump,-2-next-jump.
+
     int get_need_token_continue_read(int position) const; // 返回到达目标连续read时token消耗(包含到达后的读取)
     int get_need_token_continue_pass(int position) const; // 返回到达目标连续pass时token消耗(包含到达后的读取)
     void refresh_token_manager();
@@ -221,6 +223,11 @@ public:
         return partitions[partition_id];
     }
 
+    int get_residual_capacity(int partition_id) const; // 获取区间块的剩余容量
+
+    void reduce_residual_capacity(int partition_id, int size); // 减少区间块的剩余容量
+
+    void increase_residual_capacity(int partition_id, int size); // 增加区间块的剩余容量
     void reflash_partition_score();
     // int update_partition_info(int partition_id, const Request & req);
     void update_partition_info(int partition_id, float score);

@@ -1,5 +1,5 @@
 #include "disk.h"
-#include <cassert>
+
 
 Disk::Disk(int disk_id, int disk_capacity, int max_tokens) 
     : id(disk_id)
@@ -13,8 +13,10 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     , part_p(nullptr)
     , last_ok(true) {
     // 初始化每个存储单元的分区信息
-    storage_partition_map.resize(disk_capacity + 1);
-    partitions.resize(DISK_PARTITIONS + 1);  // 分区编号从 1 到 20
+    storage_partition_map.resize(disk_capacity + 1);        // 存储单元编号从 1 到 disk_capacity
+    partitions.resize(DISK_PARTITIONS + 1);                 // 分区编号从 1 到 20
+    residual_capacity.resize(DISK_PARTITIONS + 1, 0);       // 分区编号从 1 到 20
+    initial_max_capacity.resize(DISK_PARTITIONS + 1, 0);    // 分区编号从 1 到 20
 
     // 计算区间块的起始索引和大小
     for (int i = 1; i <= DISK_PARTITIONS; i++) {  
@@ -24,6 +26,8 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
         // partitions[i] = {start, end - start + 1}; 
         partitions[i] = PartitionInfo(start, end - start + 1);  // 直接初始化 PartitionInfo()
         partitions[i - 1].next = &partitions[i];  // 设置 next 指针
+        residual_capacity[i] = end - start + 1;
+        initial_max_capacity[i] = end - start + 1;
     }
     partitions[DISK_PARTITIONS].next = &partitions[1];  // 首尾相连
 
@@ -164,6 +168,11 @@ int Disk::read(){
     else return 0;
 }
 
+// ？？？
+int Disk::get_partition_id(int position) const {
+    assert(position >= 1 && position <= capacity);
+    return storage_partition_map[position];
+
 // int Disk::get_partition_id(int position) const {
 //     assert(position > 0 && position <= capacity);
 //     return storage_partition_map[position];
@@ -195,6 +204,30 @@ void Disk::update_partition_info(int partition_id, float score){
     // partitions[partition_id].score = req.get_size_score() * req.get_time_score();
     // partitions[partition_id].score = req.get_size_score() * req.compute_time_score_update(t);
     // return 0;
+}
+
+const PartitionInfo& Disk::get_partition_info(int partition_id) const {
+    assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
+    return partitions[partition_id];
+}
+
+int Disk::get_residual_capacity(int partition_id) const {
+    assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
+    return residual_capacity[partition_id];
+}
+
+void Disk::reduce_residual_capacity(int partition_id, int size) {
+    assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
+    assert(size >= 0 && size <= residual_capacity[partition_id]);
+    residual_capacity[partition_id] -= size;
+    assert(residual_capacity[partition_id] <= initial_max_capacity[partition_id] && "The write operation caused the residual capacity to exceed the maximum capacity");
+}
+
+void Disk::increase_residual_capacity(int partition_id, int size) {
+    assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
+    residual_capacity[partition_id] += size;
+    // std::cerr<< "-------------------------: "<< (residual_capacity[partition_id] <= initial_max_capacity[partition_id]) << std::endl;
+    assert(residual_capacity[partition_id] <= initial_max_capacity[partition_id] && "The deletion operation caused the remaining capacity to exceed the maximum capacity");
 }
 
 // bool Disk::head_is_free() const{

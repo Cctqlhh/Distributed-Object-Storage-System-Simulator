@@ -4,6 +4,9 @@ std::vector<Request> requests(MAX_REQUEST_NUM);
 std::vector<Object> objects(MAX_OBJECT_NUM);
 std::vector<Disk> disks;
 int T, M, N, V, G;
+// TagManager tagmanager(0, 0);
+std::vector<std::vector<int>> conflict_matrix; // 冲突矩阵
+std::vector<int> tag_conflict_sum; // 从 1 到 M，有 M 行
 TagManager tagmanager(0, 0, 0);
 
 int current_max_request_id = 0; // 记录目前已处理的最大请求id
@@ -22,7 +25,9 @@ void preprocess() {
     std::vector<std::vector<int>> fre_read(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> sum(M + 1, std::vector<int>(slicing_count + 1, 0)); // 对象累积总大小
     std::vector<std::vector<int>> write_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 写入矩阵
-    std::vector<std::vector<int>> conflict_matrix(M + 1, std::vector<int>(M + 1, 0)); // 冲突矩阵
+    conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 冲突矩阵
+    tag_conflict_sum.resize(M + 1, 0); // 标签冲突数
+
     // fre_del
     for (int i = 1; i <= M; i++)
     {
@@ -80,14 +85,26 @@ void preprocess() {
         }
     }
 
+    // 计算每个标签的冲突数
+    for (int i = 1; i <= M; i++) {
+        int sum = 0;
+        for (int j = 1; j <= M; j++) {
+            sum += conflict_matrix[i][j];
+        }
+        tag_conflict_sum[i] = sum;  // 从 1 到 M，有 M 行
+    }
+
+
     // 初始化磁盘，把硬盘划分为二维区间块   有问题？？？
-    disks.resize(N + 1);
+    disks.resize(N + 1);    // 磁盘数组 1-N
     for (int i = 1; i <= N; i++) {
         disks[i] = Disk(i, V, G);
     }
 
     // 调用全局 tagmanager 进行标签分配
-    tagmanager.allocate_tag_storage(sum, conflict_matrix, disks);
+    tagmanager.calculate_tag_disk_requirement(sum, conflict_matrix, disks);
+    tagmanager.allocate_tag_disk_requirement(disks);
+//     tagmanager.allocate_tag_storage(sum, conflict_matrix, disks);
     tagmanager.compute_delete_prob(sum, fre_del); // 计算删除概率
 
     // 预处理结束
@@ -109,7 +126,7 @@ void delete_action(int t)
     int n_delete;
     int abort_num = 0;
     static int _id[MAX_OBJECT_NUM];
-
+    // 删除接收
     scanf("%d", &n_delete); // 要删除的对象个数
     for (int i = 1; i <= n_delete; i++) {
         scanf("%d", &_id[i]); // 要删除的对象id
@@ -118,8 +135,9 @@ void delete_action(int t)
     // 预分配空间存储未完成的请求ID
     std::vector<int> aborted_requests;
     for (int i = 1; i <= n_delete; i++) {
-        int id = _id[i];
-        int current_id = objects[id].get_last_request();
+        int id = _id[i];    // 要删除的对象id
+        if (objects[id].is_deleted_status()) continue; // 已经删除的对象不再删除
+        int current_id = objects[id].get_last_request();    // 找到对象最后新增的读取请求
         while (current_id != 0) { // 遍历请求链表
             if (!requests[current_id].is_completed()) {
                 abort_num++; // 统计未完成的请求个数
@@ -130,8 +148,10 @@ void delete_action(int t)
         
         for (int j = 1; j <= REP_NUM; j++) {
             int disk_id = objects[id].get_replica_disk_id(j);
-            objects[id].delete_replica(j, disks[disk_id]);
+            objects[id].delete_replica(j, disks[disk_id]); // 删除对象的每个副本
         }
+        // 删除结束
+        tagmanager.update_tag_info_after_delete(objects[id]); // 更新被删除对象的相关标签信息
         objects[id].mark_as_deleted();
     }
 
@@ -147,21 +167,46 @@ void write_action(int t)
 {
     int n_write;
     scanf("%d", &n_write); // 要写的对象个数
+    
+    // 每个对象顺着各自写入 
     for (int i = 1; i <= n_write; i++) { // 要写的对象
         int id, size, tag;
         scanf("%d%d%d", &id, &size, &tag); // 对象id,对象大小,对象标签(未保存)
-        objects[id] = Object(id, size, tag);
-        for (int j = 1; j <= REP_NUM; j++) { // 对象的第j个副本
         
-            int disk_id = (id + j) % N + 1;
-            if (!objects[id].write_replica(j, disks[disk_id])) {
-                assert(false);  // 写入失败
+        // 创建对象并存入对象数组
+        objects[id] = Object(id, size, tag);
+        
+        // 计算出对象所需的位于三个不同硬盘的三个区间块
+        std::vector<std::pair<int, int>> chosen_partitions; // 存储 {硬盘ID, 区间块ID}
+        chosen_partitions = objects[id].select_storage_partitions(tagmanager, disks, conflict_matrix);
+        
+        // std::cerr<< "Object " << id << " size " << size << " tag " << tag << std::endl;
+        // for (int j = 0; j < REP_NUM; j++) {
+        //     std::cerr << "Object " << id << " replica " << j + 1 << " disk " << chosen_partitions[j].first << " partition " << chosen_partitions[j].second << std::endl;
+        // }
+
+        // // 写入对象
+        // objects[id].write_object(disks);
+
+        // 把对象三个副本写入到三个区间块中
+        for (int j = 1; j <= REP_NUM; j++) {
+            int disk_id = chosen_partitions[j - 1].first;       // 硬盘ID
+            int partition_id = chosen_partitions[j - 1].second; // 区间块ID
+            const PartitionInfo& partition_info = disks[disk_id].get_partition_info(partition_id); // 区间块信息
+            int start_pos = partition_info.start; // 区间块起始位置
+            int end_pos = start_pos + partition_info.size - 1; // 区间块结束位置
+            // 执行写入
+            if (!objects[id].write_replica(j, disks[disk_id], start_pos, end_pos)) {
+                assert(false && "Error: Object write failed!");
             }
         }
-
+        // 写入结束
+        tagmanager.update_tag_info_after_write(objects[id]); // 更新被写入对象的相关标签信息
+        
         printf("%d\n", id);
         for (int j = 1; j <= REP_NUM; j++) {
             printf("%d", objects[id].get_replica_disk_id(j));
+            assert(objects[id].get_replica_disk_id(j) >= 1 && objects[id].get_replica_disk_id(j) <= N && "Error: Invalid replica disk id!");
             for (int k = 1; k <= size; k++) {
                 printf(" %d", objects[id].get_storage_position(j, k));
             }

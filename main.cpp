@@ -148,7 +148,7 @@ void timestamp_action()
     scanf("%*s%d", &timestamp);
     printf("TIMESTAMP %d\n", timestamp);
 
-    std::cerr << "Timestamp " << timestamp << std::endl;
+    // std::cerr << "Timestamp " << timestamp << std::endl;
 
     fflush(stdout);
 }
@@ -219,10 +219,10 @@ void write_action()
         std::vector<std::pair<int, int>> chosen_partitions; // 存储 {硬盘ID, 区间块ID}
         chosen_partitions = objects[id].select_storage_partitions(tagmanager, disks, conflict_matrix);
         
-        std::cerr<< "Object " << id << " size " << size << " tag " << tag << std::endl;
-        for (int j = 0; j < REP_NUM; j++) {
-            std::cerr << "Object " << id << " replica " << j + 1 << " disk " << chosen_partitions[j].first << " partition " << chosen_partitions[j].second << std::endl;
-        }
+        // std::cerr<< "Object " << id << " size " << size << " tag " << tag << std::endl;
+        // for (int j = 0; j < REP_NUM; j++) {
+        //     std::cerr << "Object " << id << " replica " << j + 1 << " disk " << chosen_partitions[j].first << " partition " << chosen_partitions[j].second << std::endl;
+        // }
 
         // // 写入对象
         // objects[id].write_object(disks);

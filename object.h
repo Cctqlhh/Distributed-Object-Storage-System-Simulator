@@ -51,10 +51,8 @@ public:
     int get_tag_id() const;  // 获取对象的标签 ID
 
     // 根据对象标签进行对象写入区间块的选择（确保所有存储规则）
-    std::vector<std::pair<int, int>> select_storage_partitions(
-        TagManager& tag_manager,
-        std::vector<Disk>& disks,
-        const std::vector<std::vector<int>>& conflict_matrix);
-    
+    std::vector<std::pair<int, int>> select_storage_partitions(TagManager& tag_manager,
+                                                                std::vector<Disk>& disks,
+                                                                const std::vector<std::vector<int>>& conflict_matrix);
     std::vector<std::pair<int, int>> get_chosen_partitions() const;
 };

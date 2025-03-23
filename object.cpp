@@ -11,44 +11,52 @@ Object::Object(int id, int size, int tag)
 
 bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
+
+    // std::cerr<<"write_object: object_id="<<object_id
+    //         <<",write_replica: replica_idx=" << replica_idx
+    //         <<",disk_id="<<disk.get_id()
+    //         <<",partition_id="<<chosen_partitions[replica_idx - 1].second
+    //         <<",residual_capacity=" << disk.get_residual_capacity(chosen_partitions[replica_idx - 1].second)<<std::endl
+    //         <<",size=" << size <<std::endl;
+
     int current_write_point = 0;    // 当前写入大小
     for (int i = start_pos; i <= end_pos; i++) {
         if (disk.is_free(i)) {
             if (disk.write(i, object_id)) {
                 unit_pos[replica_idx][++current_write_point] = i;
+                // 写入完毕
                 if (current_write_point == size) {
                     replica_disks[replica_idx] = disk.get_id();
+                    // 减小区间块剩余大小 replica_idx 为1-3
+                    disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
                     return true;
                 }
             }
         }
     }
-    // 减小区间块剩余大小 replica_idx 为1-3
-    disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
     // 这里不可能写入失败，如果写入失败，直接报错
     assert(current_write_point == size && "The write operation failed.");
     return false;
 }
 
 void Object::delete_replica(int replica_idx, Disk& disk) {
+    assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
+
+    // std::cerr<<"delete_object: object_id="<<object_id
+    //         <<",delete_replica: replica_idx="<<replica_idx
+    //         <<",disk_id="<<disk.get_id()
+    //         <<",partition_id="<<chosen_partitions[replica_idx - 1].second
+    //         <<",residual_capacity=" << disk.get_residual_capacity(chosen_partitions[replica_idx - 1].second)<<std::endl
+    //         <<",size=" << size <<std::endl;
+
     // 自身存储数据不需要清零，只需要维护其他相关数据即可
     // 删除硬盘存储
     int current_delete_point = 0;    // 当前删除大小
-
-    std::cerr<<"delete_replica: replica_idx="<<replica_idx
-            <<", disk_id="<<disk.get_id()<<", partition_id="<<chosen_partitions[replica_idx - 1].second
-            <<"shengyu" << disk.get_residual_capacity(chosen_partitions[replica_idx - 1].second)<<std::endl
-            << "size" << size;
-
     for (int i = 1; i <= size; i++) {
         disk.erase(unit_pos[replica_idx][i]);
         current_delete_point++;
     }
-    
-    
-    std::cerr<<", current_delete_point="<<current_delete_point<<std::endl;
             
-
     // 增加区间块剩余大小   目前有问题？？？
     disk.increase_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
     // 这里不可能删除失败，如果删除失败，直接报错
@@ -56,9 +64,10 @@ void Object::delete_replica(int replica_idx, Disk& disk) {
 }
 
 bool Object::write_object(std::vector<Disk>& disks) {
-    int current_write_point = 0;    // 当前写入大小
+    int current_write_point;    // 当前写入大小
     // 把对象三个副本写入到三个区间块中
     for (int j = 1; j <= REP_NUM; j++) {
+        current_write_point = 0;    // 当前写入大小
         int disk_id = chosen_partitions[j - 1].first;       // 硬盘ID
         int partition_id = chosen_partitions[j - 1].second; // 区间块ID
         const PartitionInfo& partition_info = disks[disk_id].get_partition_info(partition_id); // 区间块信息
@@ -68,15 +77,16 @@ bool Object::write_object(std::vector<Disk>& disks) {
             if (disks[disk_id].is_free(i)) {
                 if (disks[disk_id].write(i, object_id)) {
                     unit_pos[j][++current_write_point] = i;
+                    // 写入完毕
                     if (current_write_point == size) {
                         replica_disks[j] = disk_id;
+                        // 减小区间块剩余大小
+                        disks[disk_id].reduce_residual_capacity(chosen_partitions[j - 1].second, size);
                         return true;
                     }
                 }
             }
         }
-        // 减小区间块剩余大小
-        disks[disk_id].reduce_residual_capacity(chosen_partitions[j - 1].second, size);
     }
     // 这里不可能写入失败，如果写入失败，直接报错
     assert(current_write_point == size && "The write operation failed.");

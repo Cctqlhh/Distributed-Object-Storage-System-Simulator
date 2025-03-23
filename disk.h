@@ -1,33 +1,48 @@
-#pragma once
-#include <vector>
-#include "token_manager.h"
+// #pragma once
+// #include <vector>
+// #include <cassert>
+// #include "token_manager.h"
 
-#define DISK_PARTITIONS 20  // 定义硬盘分区数
+// #define DISK_PARTITIONS 20  // 定义硬盘分区数
+
+#pragma once
+#include "global.h"
 
 // 记录磁盘区间块的起始索引和大小
 struct PartitionInfo {
     int start;  // 该区间块的起始位置（存储单元索引）
     int size;   // 该区间块的大小
+    // int residual_capacity; // 该区间块的剩余容量 
 };
 
 class Disk {
 private:
     int id;
     int capacity;
+    // 在对象写入时更新
     std::vector<int> storage;  // 存储单元，值为对象id
     int head_position;         // 磁头位置
     int max_tokens_;
     int partition_size;        // 每个分区的大小
-    std::vector<int> storage_partition_map;  // 存储单元所属的分区映射（索引 1~capacity）
-    std::vector<PartitionInfo> partitions;  // 存储每个区间块的信息（起始索引和大小）
 
+    std::vector<int> storage_partition_map;  // 存储单元所属的分区映射（索引 1~capacity）
+    
+    std::vector<PartitionInfo> partitions;  // 存储每个区间块的信息（起始索引和大小）
+    
+    // 所有区间块的初始最大容量
+    std::vector<int> initial_max_capacity;
+
+    // 在对象写入区间块时更新
+    std::vector<int> residual_capacity;     // 存储每个区间块的剩余容量，初始化为初始最大容量size
 
 public:
     TokenManager* token_manager;
     Disk() : id(0), capacity(0), head_position(1), max_tokens_(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
-    bool write(int position, int object_id);
-    void erase(int position);
+    // 写入数据
+    bool write(int position, int object_id);    // 写入对象id到指定位置 1~capacity
+    // 删除数据
+    void erase(int position);                   // 删除指定位置的数据
     int get_head_position() const;
     bool is_free(int position) const;
     int get_id() const;
@@ -53,7 +68,9 @@ public:
     // int get_partition_start(int partition_id) const; // 获取某个区间块的起始索引
     // int get_partition_end(int partition_id) const; // 获取某个区间块的结束索引
 
-    
+    int get_residual_capacity(int partition_id) const; // 获取区间块的剩余容量
 
+    void reduce_residual_capacity(int partition_id, int size); // 减少区间块的剩余容量
 
+    void increase_residual_capacity(int partition_id, int size); // 增加区间块的剩余容量
 };

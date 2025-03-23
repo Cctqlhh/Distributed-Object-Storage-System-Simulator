@@ -1,6 +1,9 @@
+// #pragma once
+// #include <cmath>
+// #include <vector>
+
 #pragma once
-#include <cmath>
-#include <vector>
+#include "global.h"
 
 class TokenManager {
 private:

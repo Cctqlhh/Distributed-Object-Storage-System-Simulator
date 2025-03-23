@@ -12,6 +12,7 @@
 #include <set>
 #include <map>
 #include <limits>
+#include <cstdint>
 
 // #include <thread>
 // #include <mutex>

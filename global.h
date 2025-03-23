@@ -13,12 +13,15 @@
 #include <map>
 #include <limits>
 
+// #include <thread>
+// #include <mutex>
+
 // 前向声明
 class Disk;
 class Request;
 class Object;
 class TagManager;
-class TokenManager;
+// class TokenManager;
 
 #define MAX_REQUEST_NUM (30000000 + 1)
 #define MAX_OBJECT_NUM (100000 + 1)
@@ -44,5 +47,4 @@ extern std::vector<int> tag_conflict_sum; // 从 1 到 M，有 M 行
 #include "request.h"
 #include "disk.h"
 #include "tag_manager.h"
-#include "token_manager.h"
-
+// #include "token_manager.h"

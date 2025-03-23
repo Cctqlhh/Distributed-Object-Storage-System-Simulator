@@ -1,7 +1,3 @@
-// #pragma once
-// #include <cmath>
-// #include <vector>
-
 #pragma once
 #include "global.h"
 
@@ -20,18 +16,19 @@ public:
         prev_read_cost_(0),
         last_is_read_(false) {}
     
+    ~TokenManager() = default;
     // 刷新令牌（每个时间片调用）
     void refresh(){
         current_tokens_ = max_tokens_;
     }
-    ~TokenManager() = default;
-
     // 尝试消耗指定磁头的令牌
     bool try_consume(int tokens) {
         if (current_tokens_ >= tokens) {
+            // std::cerr << "current_tokens_" << current_tokens_ << " ok" << std::endl;
             current_tokens_ -= tokens;
             return true;
         }
+        // std::cerr << "current_tokens_" << current_tokens_ << " no" << std::endl;
         return false;
     }
 

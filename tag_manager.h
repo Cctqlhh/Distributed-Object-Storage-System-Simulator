@@ -1,18 +1,9 @@
-// #pragma once
-// #include <vector>
-// #include <unordered_set>
-// #include <set>
-// #include <map>
-// #include <cassert>  // 添加 assert 头文件
-// #include <algorithm>
-// #include <limits>
-// #include "disk.h"
-// #include "Object.h"
 
-// #define REP_NUM 3                           // 每个标签需要分配3个不同的磁盘存储副本
-// #define PARTITION_ALLOCATION_THRESHOLD 20   // 选择第20个时间片组作为计算标签初始存储需求的基准
-// #define SCALE 0.5                           // 选择初始存储需求的比例因子
-// #define MAX_PARTITIONS_PER_TAG 10           // 同一个标签在一个磁盘上的最多区间块数
+#pragma once
+#include <vector>
+#include <unordered_set>
+#include "disk.h"
+#include "global.h"
 
 // class Object; // 前向声明   只需要引用，前向声明足够
 
@@ -21,6 +12,7 @@
 
 class TagManager {
 public:
+    std::vector<std::vector<double>> tag_delete_prob;      // 记录每个标签的区间块分配情况
     // 使用：初始分配
     // 更新：无
     // 初始设定标签映射硬盘时，每个标签映射三个磁盘 M * 3，数值为 硬盘号
@@ -86,7 +78,8 @@ public:
 
 
 
-    TagManager(int M, int N);  
+//     TagManager(int M, int N);  
+    TagManager(int M = 0, int N = 0, int slicing_count = 0);
 
     // 计算每个标签的初始分配磁盘和所需区间块数量
     void calculate_tag_disk_requirement(const std::vector<std::vector<int>>& sum, 
@@ -101,5 +94,12 @@ public:
     // 根据写入对象，更新所有标签信息
     void update_tag_info_after_write(const Object& object);
 
+//     // 为每个标签分配磁盘和区间块
+//     void allocate_tag_storage(const std::vector<std::vector<int>>& sum, 
+//                               const std::vector<std::vector<int>>& conflict_matrix,
+//                               std::vector<Disk>& disks);
+//     // 计算最终磁盘分布
+//     void allocate_final_storage(std::vector<Disk>& disks); 
+    void compute_delete_prob(const std::vector<std::vector<int>>& sum, 
+        const std::vector<std::vector<int>>& fre_del);
 };
-

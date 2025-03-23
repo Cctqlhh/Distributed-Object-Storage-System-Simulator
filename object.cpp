@@ -1,26 +1,31 @@
 #include "object.h"
 
-Object::Object(int id, int size, int tag) 
+
+Object::Object(int id, int size, int tag_id) 
     : object_id(id)
     , size(size)
-    , tag_id(tag)  // **初始化标签**
+    , tag_id(tag_id)
     , last_request_point(0)
     , is_deleted(false)
     , replica_disks(REP_NUM + 1)
-    , unit_pos(REP_NUM + 1, std::vector<int>(size + 1)){}
+    , unit_pos(REP_NUM + 1, std::vector<int>(size + 1))
+    , partition_id(REP_NUM + 1)
+    , request_num(0) {}
+    
+
 
 bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
-
-    // std::cerr<<"write_object: object_id="<<object_id
-    //         <<",write_replica: replica_idx=" << replica_idx
-    //         <<",disk_id="<<disk.get_id()
-    //         <<",partition_id="<<chosen_partitions[replica_idx - 1].second
-    //         <<",residual_capacity=" << disk.get_residual_capacity(chosen_partitions[replica_idx - 1].second)<<std::endl
-    //         <<",size=" << size <<std::endl;
-
     int current_write_point = 0;    // 当前写入大小
+    int disk_capacity = disk.get_capacity();
+  
+    // 预分配空间，避免多次重新分配
+    std::vector<int> positions;
+    positions.reserve(size);
+    
+    // 先找到所有空闲位置，减少磁盘操作次数
     for (int i = start_pos; i <= end_pos; i++) {
+//     for (int i = 1; i <= disk_capacity && current_write_point < size; i++) {
         if (disk.is_free(i)) {
             if (disk.write(i, object_id)) {
                 unit_pos[replica_idx][++current_write_point] = i;
@@ -108,6 +113,7 @@ void Object::delete_object(std::vector<Disk>& disks) {
         // 这里不可能删除失败，如果删除失败，直接报错
         assert(current_write_point == size && "The delete operation failed.");
     }
+    request_num = 0;
 }
 
 int Object::get_storage_position(int replica_idx, int block_idx) const {
@@ -126,6 +132,7 @@ void Object::mark_as_deleted() {
 
 void Object::update_last_request(int request_id) {
     last_request_point = request_id;
+    add_request();
 }
 
 int Object::get_last_request() const {
@@ -154,16 +161,11 @@ bool Object::is_valid_replica(int replica_idx) const {
     assert(replica_idx > 0 && replica_idx < replica_disks.size());
     return replica_disks[replica_idx] > 0;
 }
-
-int Object::get_tag_id() const {
-    return tag_id;
-}
-
 std::vector<std::pair<int, int>> Object::select_storage_partitions(
-    TagManager& tag_manager,
-    std::vector<Disk>& disks,
-    const std::vector<std::vector<int>>& conflict_matrix) {
-    
+      TagManager& tag_manager,
+      std::vector<Disk>& disks,
+      const std::vector<std::vector<int>>& conflict_matrix) {
+
     chosen_partitions.clear();
     std::unordered_set<int> used_disks;         // 已选过的硬盘，保证三个副本在不同硬盘上 
     int N = disks.size() - 1;                   // 硬盘总数
@@ -312,4 +314,36 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
 
 std::vector<std::pair<int, int>> Object::get_chosen_partitions() const {
     return chosen_partitions;
+
+int Object::get_partition_id(int replica_idx) const {
+    return partition_id[replica_idx];
+}
+
+int Object::is_in_disk(int disk_id) const{
+    for(int i = 1; i <= REP_NUM; i++){
+        if(replica_disks[i] == disk_id) return i;
+    }
+    return 0;
+}
+
+int Object::get_which_unit(int disk_id, int unit_pos) const{
+    int replica_idx = is_in_disk(disk_id);
+    int pos = 0;
+    for(int block_idx=1; block_idx<=size; block_idx++){
+        pos = get_storage_position(replica_idx, block_idx);
+        if(pos == unit_pos) return block_idx;
+    }
+    return 0;
+}
+
+void Object::add_request(){
+    request_num++;
+}
+
+void Object::reduce_request(){
+    request_num--;
+}
+
+int Object::get_request_num() const {
+    return request_num;
 }

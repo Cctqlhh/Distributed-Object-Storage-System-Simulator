@@ -1,15 +1,15 @@
 #include "tag_manager.h"
 
-
-TagManager::TagManager(int M, int N)
-    : init_tag_disk(M + 1, std::vector<int>(REP_NUM, -1)),  // 初始化标签磁盘映射
+TagManager::TagManager(int M, int N, int slicing_count)
+    : tag_delete_prob(M + 1, std::vector<double>(REP_NUM, 0.0f)), 
+    init_tag_disk(M + 1, std::vector<int>(REP_NUM, -1)),  // 初始化标签磁盘映射
     init_tag_partition_num(M + 1, std::vector<int>(REP_NUM, 0)),     // 初始化标签区间块映射
     disk_partition_usage_tagnum(N + 1, std::vector<std::vector<int>>(DISK_PARTITIONS + 1, std::vector<int>(M, 0))), // 支持多个标签共存
     disk_partition_usage_tagkind(N + 1, std::vector<std::unordered_set<int>>(DISK_PARTITIONS + 1)),                   // 记录每个硬盘上的区间块已分配的标签种类数
     disk_tag_kind(N + 1),                  // 记录每个硬盘上的标签
     disk_tag_partition_num(N + 1),    // 记录每个硬盘上的标签及其区间块数量
     tag_disk_partition(M + 1)     // 记录每个标签分配的所有硬盘id和区间块id
-{}
+    {}
 
 void TagManager::calculate_tag_disk_requirement(const std::vector<std::vector<int>>& sum, 
                                       const std::vector<std::vector<int>>& conflict_matrix,
@@ -232,3 +232,13 @@ void TagManager::update_tag_info_after_write(const Object& object) {
         tag_disk_partition[tag][disk_id].push_back(part_id);
     }
 }
+void TagManager::compute_delete_prob(const std::vector<std::vector<int>>& sum, 
+    const std::vector<std::vector<int>>& fre_del){
+        for (int i = 1; i <= tag_delete_prob.size()-1; i++)
+        {
+            for (int j = 1; j <= tag_delete_prob[0].size()-1; j++)
+            {
+                tag_delete_prob[i][j] = sum[i][j] > 0 ? (double)fre_del[i][j] / sum[i][j] : 0;
+            }
+        }
+    }

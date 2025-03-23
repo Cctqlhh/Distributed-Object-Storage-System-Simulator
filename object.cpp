@@ -314,6 +314,7 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
 
 std::vector<std::pair<int, int>> Object::get_chosen_partitions() const {
     return chosen_partitions;
+}
 
 int Object::get_partition_id(int replica_idx) const {
     return partition_id[replica_idx];

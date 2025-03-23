@@ -35,7 +35,6 @@ public:
     // 在硬盘上删除该对象的三个副本
     void delete_object(std::vector<Disk>& disks);
     // 获取该对象在硬盘上的存储位置
-    int get_storage_position(int replica_idx, int block_idx) const;
     bool is_deleted_status() const; //判断对象是否已删除
     void mark_as_deleted(); //标记对象为已删除
   

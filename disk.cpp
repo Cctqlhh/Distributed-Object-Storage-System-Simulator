@@ -169,10 +169,10 @@ int Disk::read(){
 }
 
 // ？？？
-int Disk::get_partition_id(int position) const {
-    assert(position >= 1 && position <= capacity);
-    return storage_partition_map[position];
-
+// int Disk::get_partition_id(int position) const {
+//     assert(position >= 1 && position <= capacity);
+//     return storage_partition_map[position];
+// }
 // int Disk::get_partition_id(int position) const {
 //     assert(position > 0 && position <= capacity);
 //     return storage_partition_map[position];
@@ -206,10 +206,10 @@ void Disk::update_partition_info(int partition_id, float score){
     // return 0;
 }
 
-const PartitionInfo& Disk::get_partition_info(int partition_id) const {
-    assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
-    return partitions[partition_id];
-}
+// const PartitionInfo& Disk::get_partition_info(int partition_id) const {
+//     assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
+//     return partitions[partition_id];
+// }
 
 int Disk::get_residual_capacity(int partition_id) const {
     assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);

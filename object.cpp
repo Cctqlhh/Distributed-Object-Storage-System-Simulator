@@ -161,6 +161,7 @@ bool Object::is_valid_replica(int replica_idx) const {
     assert(replica_idx > 0 && replica_idx < replica_disks.size());
     return replica_disks[replica_idx] > 0;
 }
+
 std::vector<std::pair<int, int>> Object::select_storage_partitions(
       TagManager& tag_manager,
       std::vector<Disk>& disks,
@@ -168,20 +169,20 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
 
     chosen_partitions.clear();
     std::unordered_set<int> used_disks;         // 已选过的硬盘，保证三个副本在不同硬盘上 
-    int N = disks.size() - 1;                   // 硬盘总数
 
     // ========== Lambda：判断某个区间块是否满足写入条件 ==========
     auto can_use = [&](int disk_id, int part_id) {
-        if (used_disks.count(disk_id)) return false;    // 不允许重复硬盘   
-        if (disks[disk_id].get_residual_capacity(part_id) < size) return false; // 空间不足
-
-        // 判断该标签在该硬盘上的区间块数是否已达到上限
+        // 不允许重复硬盘   
+        if (used_disks.count(disk_id)) return false;
+        // 不允许空间不足    
+        if (disks[disk_id].get_residual_capacity(part_id) < size) return false; 
+        // 不允许该标签在该硬盘上的区间块数超出上限
         int tag_count = 0;
         for (int p = 1; p <= DISK_PARTITIONS; ++p) {
             if (tagmanager.disk_partition_usage_tagkind[disk_id][p].count(tag_id)) tag_count++;    // 该标签在该硬盘上的区间块数
         }
         if (tag_count > MAX_PARTITIONS_PER_TAG) return false;
-
+        // 上述条件都满足，则该标签能够写入该硬盘上的该区间块
         return true;
     };
 
@@ -192,119 +193,148 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
             int expected_tag_count) {
 
             if ((int)chosen_partitions.size() == REP_NUM) return;  // 已经选够了，直接退出
-
-            int max_inner_conflict = -1;
-            int min_disk_conflict = std::numeric_limits<int>::max();
-            std::pair<int, int> best_partition = {-1, -1};
+            
+            bool found = false;                                         // 是否找到合适的区间块
+            std::pair<int, int> best_partition = {-1, -1};              // 最优区间块
+            int best_inner_conflict = -1;                               // 该对象标签与该区间块中标签的冲突值,越大越好
+            int best_disk_conflict = std::numeric_limits<int>::max();   // 该对象标签与该硬盘中标签的冲突值,越小越好
+            int best_disk_tag_partition_count = std::numeric_limits<int>::max(); // 该硬盘已分配标签的区间块数量,越小越好
+            int best_residual = -1;                                     // 该区间块剩余容量,越大越好      
             
             // 遍历该集合下所有满足条件的区间块
-            for (const auto& [disk_id, part_id] : from_set) {
-                if (!can_use(disk_id, part_id)) continue;
+            for (const auto& candidate  : from_set) {
+                int disk_id = candidate.first;
+                int part_id = candidate.second;
+                if (tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id)) continue;  // 该区间块包含该对象标签，跳过
+                if (!can_use(disk_id, part_id)) continue;   // 该区间块不满足条件，跳过
                 const auto& tags = tag_manager.disk_partition_usage_tagkind[disk_id][part_id];
-                if ((int)tags.size() != expected_tag_count) continue;
+                // if ((int)tags.size() != expected_tag_count) continue;   
+                // 不是当前标签数量的区间块，跳过 
+                if (expected_tag_count < 4) {
+                    if ((int)tags.size() != expected_tag_count) continue;
+                } else {
+                    if ((int)tags.size() < expected_tag_count) continue;
+                }
 
-                // 计算当前区间块中标签与当前对象标签的冲突值
+                // 计算区间内部冲突值：当前对象标签与该区间中所有标签的冲突值之和
                 int inner_conflict = 0; 
-                for (int t : tags) inner_conflict += conflict_matrix[tag_id][t]; // inner_conflict有可能还是0
+                for (int t : tags) {
+                    inner_conflict += conflict_matrix[tag_id][t]; // inner_conflict有可能还是0
+                }
 
-                // 计算整块磁盘中标签的冲突值
+                // 计算整盘冲突值：当前对象标签与该磁盘上所有已分配标签的冲突值之和
                 int disk_conflict = 0;
                 for (int t : tag_manager.disk_tag_kind[disk_id]) {
                     disk_conflict += conflict_matrix[tag_id][t];
                 }
 
-                // 策略：先选内部冲突大的，再在冲突值相同时选整盘冲突更小的
-                if (
-                    inner_conflict > max_inner_conflict ||
-                    (inner_conflict == max_inner_conflict && disk_conflict < min_disk_conflict)
+                // 计算该硬盘上所有标签分区数量的和（越小代表该磁盘负载越低），可能会超20，但不影响选择
+                int disk_tag_partition_count = 0;
+                for (const auto& entry : tag_manager.disk_tag_partition_num[disk_id]) {
+                    disk_tag_partition_count += entry.second;
+                }
+
+                // 获取该区间块剩余容量
+                int residual = disks[disk_id].get_residual_capacity(part_id);
+
+                // // 为标签选择新区间块的策略1：
+                // // 1. inner_conflict 越大越好
+                // // 2. 若相同，则 disk_conflict 越小越好
+                // // 3. 若仍相同，则 disk_tag_partition_count 越小越好
+                // // 4. 最后选 residual 越大越好
+                // if (!found ||
+                //     (inner_conflict > best_inner_conflict) ||
+                //     (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
+                // ) {
+                //     best_partition = candidate;
+                //     best_inner_conflict = inner_conflict;
+                //     best_disk_conflict = disk_conflict;
+                //     best_disk_tag_partition_count = disk_tag_partition_count;
+                //     best_residual = residual;
+                //     found = true;
+                // }
+
+                // 为标签选择新区间块的策略：
+                // 1. disk_tag_partition_count 越小越好
+                // 2. 若相同，则 inner_conflict 越大越好
+                // 3. 若相同，则 disk_conflict 越小越好
+                // 4. 若相同，则 residual 越大越好
+                if (!found ||
+                    (disk_tag_partition_count < best_disk_tag_partition_count) ||       
+                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual)
                 ) {
-                    max_inner_conflict = inner_conflict;
-                    min_disk_conflict = disk_conflict;
-                    best_partition = {disk_id, part_id};
+                    best_partition = candidate;
+                    best_inner_conflict = inner_conflict;
+                    best_disk_conflict = disk_conflict;
+                    best_disk_tag_partition_count = disk_tag_partition_count;
+                    best_residual = residual;
+                    found = true;
                 }
             }
 
             // 找到了合适的区间块，更新所有信息
-            if (best_partition.first != -1) {
-                int disk_id = best_partition.first, part_id = best_partition.second;
-                chosen_partitions.emplace_back(disk_id, part_id);
+            if (found) {
+                int disk_id = best_partition.first;                 // 硬盘ID
+                int part_id = best_partition.second;                // 区间块ID
+                chosen_partitions.emplace_back(disk_id, part_id);   // 只选择一个最优的区间块
                 used_disks.insert(disk_id);
-                
-                
-                // tag_manager.disk_partition_usage_tagnum[disk_id][part_id][tag_id] += 1; 
-                // if (tag_manager.disk_partition_usage_tagnum[disk_id][part_id][tag_id] == 1) {
-                //     tag_manager.disk_partition_usage_tagkind[disk_id][part_id].insert(tag_id);
-                // }
-                // tag_manager.disk_tag[disk_id].insert(tag_id);
-                // tag_manager.disk_tag_partition_num[disk_id][tag_id]++;
-                // tag_manager.tag_to_disk_partitions[tag_id][disk_id].push_back(part_id);
-
-                from_set.erase(best_partition);                 // 从旧集合中删除  
-                if (to_set) to_set->insert(best_partition);     // 加入新的集合（用于后续状态转移）
+                if (expected_tag_count <= 3) {
+                    from_set.erase(best_partition);                 // 从旧集合中删除
+                }
+                if (to_set) { 
+                    to_set->insert(best_partition);                 // 加入新的集合（用于后续状态转移）
+                }
             }
         };
 
     // ========== Step 1：优先使用已有分配给该标签的区间块 ==========
     for (const auto& [disk_id, parts] : tag_manager.tag_disk_partition[tag_id]) {
         for (int part_id : parts) {
-            if (!used_disks.count(disk_id) &&
-                tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id) &&
+            // 该硬盘未被选过，该区间块被选过，该区间块容量满足要求
+            if (!used_disks.count(disk_id) &&                                                   
+                tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id) &&    
                 disks[disk_id].get_residual_capacity(part_id) >= size) {
 
                 chosen_partitions.emplace_back(disk_id, part_id);
                 used_disks.insert(disk_id);
-                
-                if ((int)chosen_partitions.size() == REP_NUM) break;
+                break;  // 该硬盘只能选择一个区间块，因此跳过后续区间块
             }
         }
         if ((int)chosen_partitions.size() == REP_NUM) break;
     }
 
     // ========== Step 2：选择 0 标签区间块 ==========
-    try_allocate_from_tag_partitions(
-        tag_manager.zero_tag_partitions,
-        &tag_manager.one_tag_partitions,
-        0);
+    // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
+    for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
+        try_allocate_from_tag_partitions(tag_manager.zero_tag_partitions, &tag_manager.one_tag_partitions, 0);
+    }
 
     // ========== Step 3：选择 1 标签区间块 ==========
-    try_allocate_from_tag_partitions(
-        tag_manager.one_tag_partitions,
-        &tag_manager.two_tag_partitions,
-        1);
+    // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
+    for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
+        try_allocate_from_tag_partitions(tag_manager.one_tag_partitions, &tag_manager.two_tag_partitions, 1);
+    }
 
     // ========== Step 4：选择 2 标签区间块 ==========
-    try_allocate_from_tag_partitions(
-        tag_manager.two_tag_partitions,
-        &tag_manager.three_tag_partitions,
-        2);
+    // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
+    for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
+        try_allocate_from_tag_partitions(tag_manager.two_tag_partitions, &tag_manager.three_tag_partitions, 2);
+    }
 
     // ========== Step 5：选择 3 标签区间块 ==========
-    try_allocate_from_tag_partitions(
-        tag_manager.three_tag_partitions,
-        nullptr,
-        3);
+    // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
+    for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
+        try_allocate_from_tag_partitions(tag_manager.three_tag_partitions, &tag_manager.more_tag_partitions, 3); 
+    }
 
     // ========== Step 6（兜底）：遍历所有区间块，强行挑选满足条件的块 ==========
-    if ((int)chosen_partitions.size() < REP_NUM) {
-        for (int disk_id = 1; disk_id <= N && (int)chosen_partitions.size() < REP_NUM; ++disk_id) {
-            if (used_disks.count(disk_id)) continue;
-            for (int part_id = 1; part_id <= DISK_PARTITIONS; ++part_id) {
-                if (can_use(disk_id, part_id)) {
-                    chosen_partitions.emplace_back(disk_id, part_id);
-                    used_disks.insert(disk_id);
-                    break;
-                    // // 同样更新 TagManager
-                    // tag_manager.disk_partition_usage_tagnum[disk_id][part_id][tag_id] += 1;
-                    // if (tag_manager.disk_partition_usage_tagnum[disk_id][part_id][tag_id] == 1) {
-                    //     tag_manager.disk_partition_usage_tagkind[disk_id][part_id].insert(tag_id);
-                    // }
-                    // tag_manager.disk_tag[disk_id].insert(tag_id);
-                    // tag_manager.disk_tag_partition_num[disk_id][tag_id]++;
-                    // tag_manager.tag_to_disk_partitions[tag_id][disk_id].push_back(part_id);
-                    
-                }
-            }
-        }
+    // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
+    for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
+        try_allocate_from_tag_partitions(tag_manager.more_tag_partitions, nullptr, 4); 
     }
 
     // ========== 最终校验：必须分配到了三个副本 ==========

@@ -45,13 +45,13 @@ public:
     // 使用：通过该变量更新 disk_tag_kind
     // 更新：当标签使用新区间块时更新，在删除干净整个标签时更新
     // 每个硬盘上所有含有的标签及其区间块数量的映射
-    std::vector<std::map<int, int>> disk_tag_partition_num; 
+    std::vector<std::map<int, int>> disk_tag_partition_num; // 其中的map基于标签号升序排列
     
     // 使用：在给对象分配三个区间块时使用
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
     // 记录每个标签分配的所有硬盘id和上面的区间块id
     // std::vector<std::map<int, std::vector<int>>> tag_to_disk_partitions;
-    std::vector<std::map<int, std::vector<int>>> tag_disk_partition;    
+    std::vector<std::map<int, std::vector<int>>> tag_disk_partition; // 其中的map基于硬盘号升序排列  
     
     // // 使用：待定
     // // 更新：当标签使用新区间块时更新，在删除干净整个标签时更新
@@ -60,21 +60,21 @@ public:
 
     // 没有标签的磁盘id，区间块id
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
-    std::set<std::pair<int, int>> zero_tag_partitions;
+    std::set<std::pair<int, int>> zero_tag_partitions; // 其中set首先基于硬盘号升序排列,其次基于区间块号升序排列
     // 1个标签的磁盘id，区间块id
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
-    std::set<std::pair<int, int>> one_tag_partitions;
+    std::set<std::pair<int, int>> one_tag_partitions; // 其中set基于硬盘号升序排列,其次基于区间块号升序排列
     // 2个标签的磁盘id，区间块id
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
-    std::set<std::pair<int, int>> two_tag_partitions;
+    std::set<std::pair<int, int>> two_tag_partitions; // 其中set基于硬盘号升序排列,其次基于区间块号升序排列
     // 3个标签的磁盘id，区间块id
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
-    std::set<std::pair<int, int>> three_tag_partitions;
+    std::set<std::pair<int, int>> three_tag_partitions; // 其中set基于硬盘号升序排列,其次基于区间块号升序排列
 
     // 4个及以上标签的磁盘id，区间块id
     // 加快兜底策略遍历速度
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
-    std::set<std::pair<int, int>> more_tag_partitions;  
+    std::set<std::pair<int, int>> more_tag_partitions; // 其中set基于硬盘号升序排列,其次基于区间块号升序排列 
 
 
 
@@ -82,11 +82,15 @@ public:
     TagManager(int M = 0, int N = 0, int slicing_count = 0);
 
     // 计算每个标签的初始分配磁盘和所需区间块数量
-    void calculate_tag_disk_requirement(const std::vector<std::vector<int>>& sum, 
-                              const std::vector<std::vector<int>>& conflict_matrix,
-                              std::vector<Disk>& disks);
+    void calculate_tag_disk_requirement(const std::vector<std::vector<int>>& sum, const std::vector<std::vector<int>>& conflict_matrix, std::vector<Disk>& disks);
     // 计算所有磁盘的初始分布
     void allocate_tag_disk_requirement(std::vector<Disk>& disks); 
+
+    // 初始化
+    void init(const std::vector<std::vector<int>>& sum, const std::vector<std::vector<int>>& conflict_matrix, std::vector<Disk>& disks);
+
+    // 根据初始化分布，更新所有标签信息
+    void update_tag_info_after_init(const std::vector<Disk>& disks);
 
     // 根据删除对象，更新所有标签信息
     void update_tag_info_after_delete(const Object& object);
@@ -94,12 +98,6 @@ public:
     // 根据写入对象，更新所有标签信息
     void update_tag_info_after_write(const Object& object);
 
-//     // 为每个标签分配磁盘和区间块
-//     void allocate_tag_storage(const std::vector<std::vector<int>>& sum, 
-//                               const std::vector<std::vector<int>>& conflict_matrix,
-//                               std::vector<Disk>& disks);
-//     // 计算最终磁盘分布
-//     void allocate_final_storage(std::vector<Disk>& disks); 
     void compute_delete_prob(const std::vector<std::vector<int>>& sum, 
         const std::vector<std::vector<int>>& fre_del);
 };

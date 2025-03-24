@@ -175,9 +175,97 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
     std::vector<int> tag_required_blocks(M + 1, 0);                     // 每个标签需要的初始划分区间块数量
     std::vector<int> disk_remaining_partitions(N + 1, DISK_PARTITIONS); // 每个硬盘剩余区间块
     std::vector<bool> disk_used(N + 1, false);                          // 记录硬盘是否已被占用
-    
+    std::unordered_set<int> selected_disks;                             // 记录标签已选择的硬盘，最多3个
+    std::vector<int> disk_first_empty_partition(N + 1, 1);              // 记录每个硬盘第一个为空的区间块id
+
     // 清空属性
-    for (auto& s : disk_tag_kind) s.clear();                            // 清空硬盘上的标签数量
+    for (auto& inner_vec : disk_partition_usage_tagkind) {
+        for (auto& s : inner_vec) {
+            s.clear();
+        }
+    }
+    for (auto& matrix : disk_partition_usage_tagnum) { // 已经初始化完毕，不需要再清空
+        for (auto& vec : matrix) {
+            std::fill(vec.begin(), vec.end(), 0);
+        }
+    }
+    for (auto& s : disk_tag_kind) s.clear();                // 清空硬盘上的标签数量
+    for (auto& m : disk_tag_partition_num) m.clear();       // 清空硬盘上的标签及其区间块数量
+    for (auto& n : tag_disk_partition) n.clear();           // 清空标签分配的所有硬盘id和区间块id
+    zero_tag_partitions.clear();
+    one_tag_partitions.clear();
+    two_tag_partitions.clear();
+    three_tag_partitions.clear();
+    more_tag_partitions.clear();
+
+    // 因为一开始所有区间块含有的标签数量为0，所以将所有区间块添加到 zero_tag
+    for (int disk_id = 1; disk_id <= N; ++disk_id) {
+        for (int block = 1; block <= DISK_PARTITIONS; ++block) {
+            zero_tag_partitions.insert({disk_id, block});
+        }
+    }
+
+    // ========== Lambda：更新变量，维护属性 ==========
+    // disk_id: 硬盘id，tag: 标签id
+    auto update_tag_info_after_init = [&](int disk_id, int tag) {
+        // 维护属性
+        int allocated = 0;
+        for (int partition_id = disk_first_empty_partition[disk_id]; partition_id <= DISK_PARTITIONS; partition_id++) {
+            disk_partition_usage_tagkind[disk_id][partition_id].insert(tag);
+            tag_disk_partition[tag][disk_id].push_back(partition_id);
+            zero_tag_partitions.erase({disk_id, partition_id}); // 将该区间块从 zero_tag_partitions 中移除
+            one_tag_partitions.insert({disk_id, partition_id}); // 将该区间块加入 one_tag_partitions
+            allocated++;
+            if (allocated == std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id])) break; // 分配足够的区间块后退出
+        }
+        disk_tag_kind[disk_id].insert(tag);
+        disk_tag_partition_num[disk_id][tag] = std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
+        // 更新变量
+        disk_first_empty_partition[disk_id] += std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
+        disk_remaining_partitions[disk_id] = std::max(disk_remaining_partitions[disk_id] - tag_required_blocks[tag], 0);
+        disk_used[disk_id] = true;          // 标记该硬盘已被占用
+        selected_disks.insert(disk_id);     // 记录已选择的硬盘
+    };
+
+    // ========== Lambda：从未选择的硬盘中选择最佳硬盘 + 更新变量，维护属性 ==========
+    // tag: 标签id，mode:选择剩余区间块是否足够的硬盘(0:足够，1:不足)
+    auto select_best_disk = [&](int tag, int mode) {
+        // std::vector<int> disk_conflict(N + 1, std::numeric_limits<int>::max());     // 记录硬盘冲突值
+        // std::vector<int> disk_used_count(N + 1, std::numeric_limits<int>::max());   // 记录硬盘使用的区间块数量
+        bool found = false;                                                         // 记录是否找到最佳硬盘
+        int best_disk_id = -1;                                                      // 记录最佳硬盘id
+        int best_conflict_sum = std::numeric_limits<int>::max();                    // 记录最佳硬盘冲突值
+        int best_used_count = std::numeric_limits<int>::max();                      // 记录最佳硬盘使用的区间块数量
+        for (int disk_id = 1; disk_id <= N; disk_id++) {
+            if (selected_disks.count(disk_id)) continue;
+            if (mode == 0) {
+                if (disk_remaining_partitions[disk_id] < tag_required_blocks[tag]) continue; // 剩余区间块不足
+            }
+            // 计算硬盘冲突值
+            int conflict_sum = 0;
+            for (const auto& exist_tag : disk_tag_kind[disk_id])
+                conflict_sum += conflict_matrix[tag][exist_tag];
+            // 计算硬盘已使用区间块数量
+            int used_count = 0;
+            for (const auto &entry : disk_tag_partition_num[disk_id])
+                used_count += entry.second;
+            // 选择策略：
+            // 1.选择硬盘冲突值最低的硬盘
+            // 2.选择硬盘使用的区间块数量最小的硬盘
+            if (!found || 
+                (conflict_sum < best_conflict_sum) || 
+                (conflict_sum == best_conflict_sum && used_count < best_used_count)) {
+                best_conflict_sum = conflict_sum;
+                best_used_count = used_count;
+                best_disk_id = disk_id;
+                found = true;
+            }
+            if (found) {
+                update_tag_info_after_init(best_disk_id, tag);
+                if (selected_disks.size() == REP_NUM) return; // 已经选择了3个硬盘，返回
+            }
+        }
+    };
 
     // 计算每个标签需要的最小区间块数
     for (int i = 1; i <= M; i++) { 
@@ -194,37 +282,35 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
     std::sort(indices.begin(), indices.end(), [&](int a, int b) {
         return tag_conflict_sum[a] > tag_conflict_sum[b];
     });
-    // 优先给最冲突的标签分配硬盘,indices[i]为标签索引
+    // 优先给最冲突的标签分配硬盘,indices[i]为标签索引范围1~M
     for (int i = 0; i < M; i++) {
-        std::unordered_set<int> selected_disks;             // 记录已选择的硬盘 最多3个(可以小于3个)
-        selected_disks.clear();
+        selected_disks.clear(); // 记录该标签已选择的硬盘 
 
-        // 优先选择空硬盘
+        // 第一选择该标签没有选过的硬盘，空的硬盘，剩余区间块足够的硬盘
         for (int disk_id = 1; disk_id <= N; disk_id++) {
-            if (disk_used[disk_id]) continue;
             if (selected_disks.count(disk_id)) continue; // 不能重复选择硬盘
+            if (disk_used[disk_id]) continue;
             if (disk_remaining_partitions[disk_id] < tag_required_blocks[indices[i]]) continue; // 剩余区间块不足
-            // 更新分配信息
-            disk_used[disk_id] = true;          // 标记该硬盘已被占用
-            selected_disks.insert(disk_id);     // 记录已选择的硬盘
-            // 维护属性
-            disk_tag_kind[disk_id].insert(indices[i]);
-            
-
+            update_tag_info_after_init(disk_id, indices[i]);
             if (selected_disks.size() == REP_NUM) break; // 已经选择了3个硬盘，退出循环
         }
+        if (selected_disks.size() == REP_NUM) continue; // 已经选择了3个硬盘，退出循环
 
-        // 如果没有找到空的硬盘，再寻找已经使用的硬盘
-
-            
+        // 第二选择该标签没有选过的硬盘，剩余区间块足够的硬盘
+        for (int a = selected_disks.size() + 1; a <= REP_NUM; a++) {
+            select_best_disk(indices[i], 0);
+            if (selected_disks.size() == REP_NUM) break; // 已经选择了3个硬盘，退出循环
         }
+        if (selected_disks.size() == REP_NUM) continue; // 已经选择了3个硬盘，退出循环
 
-        // 如果没有找到完全空闲的硬盘，再寻找低冲突硬盘
-}
-
-
-void TagManager::update_tag_info_after_init(const std::vector<Disk>& disks) {
-
+        // 第三选择该标签没有选过的硬盘，剩余区间块不足的硬盘
+        for (int a = selected_disks.size() + 1; a <= REP_NUM; a++) {
+            select_best_disk(indices[i], 1);
+            if (selected_disks.size() == REP_NUM) break; // 已经选择了3个硬盘，退出循环
+        }
+        // 如果该标签还没有选择到3个硬盘，则报错
+        assert(selected_disks.size() == REP_NUM && "Cannot allocate enough disks for this tag.(init)");
+    }
 }
 
 void TagManager::update_tag_info_after_delete(const Object& object) {

@@ -102,8 +102,9 @@ void preprocess() {
     }
 
     // 调用全局 tagmanager 进行标签分配
-    tagmanager.calculate_tag_disk_requirement(sum, conflict_matrix, disks);
-    tagmanager.allocate_tag_disk_requirement(disks);
+    // tagmanager.calculate_tag_disk_requirement(sum, conflict_matrix, disks);
+    // tagmanager.allocate_tag_disk_requirement(disks);
+    tagmanager.init(sum, conflict_matrix, disks);
     tagmanager.compute_delete_prob(sum, fre_del); // 计算删除概率
 
     // 预处理结束

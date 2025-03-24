@@ -89,9 +89,6 @@ public:
     // 初始化
     void init(const std::vector<std::vector<int>>& sum, const std::vector<std::vector<int>>& conflict_matrix, std::vector<Disk>& disks);
 
-    // 根据初始化分布，更新所有标签信息
-    void update_tag_info_after_init(const std::vector<Disk>& disks);
-
     // 根据删除对象，更新所有标签信息
     void update_tag_info_after_delete(const Object& object);
 

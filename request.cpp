@@ -69,7 +69,7 @@ double Request::get_score(int t) const{
     // 设置各项权重，可根据实际调试调整（初始均设为 1.0）
     double weight_time = 1.0;
     double weight_size = 1.0;
-    double weight_del  = 1.0;
+    double weight_del  = 0;
     // // 使用加权乘积计算最终得分
     // double final_score = std::pow(time_score, weight_time) *
     //                      std::pow(size_score, weight_size) *

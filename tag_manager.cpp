@@ -243,6 +243,7 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
         bool found = false;                                                         // 记录是否找到最佳硬盘
         int best_disk_id = -1;                                                      // 记录最佳硬盘id
         int best_conflict_sum = std::numeric_limits<int>::max();                    // 记录最佳硬盘冲突值
+        int best_write_conflict_sum = std::numeric_limits<int>::max();              // 记录最佳硬盘写冲突值
         int best_used_count = std::numeric_limits<int>::max();                      // 记录最佳硬盘使用的区间块数量
         for (int disk_id = 1; disk_id <= N; disk_id++) {
             if (selected_disks.count(disk_id)) continue;
@@ -258,6 +259,10 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             int used_count = 0;
             for (const auto &entry : disk_tag_partition_num[disk_id])
                 used_count += entry.second;
+            // 计算硬盘写冲突值
+            int write_conflict_sum = 0;
+            for (const auto& exist_tag : disk_tag_kind[disk_id])
+                write_conflict_sum += write_conflict_matrix[tag][exist_tag];
 
             // 选择策略1：
             // 1.选择硬盘冲突值最低的硬盘
@@ -279,6 +284,19 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             //     (used_count = best_used_count && conflict_sum < best_conflict_sum)
             // ) {
             //     best_conflict_sum = conflict_sum;
+            //     best_used_count = used_count;
+            //     best_disk_id = disk_id;
+            //     found = true;
+            // }
+
+            // // 选择策略3：
+            // // 1.选择硬盘写冲突值最低的硬盘
+            // // 2.选择硬盘使用的区间块数量最小的硬盘
+            // if (!found ||
+            //     (write_conflict_sum < best_write_conflict_sum) || 
+            //     (write_conflict_sum = best_write_conflict_sum && used_count < best_used_count)
+            // ) {
+            //     best_write_conflict_sum = write_conflict_sum;
             //     best_used_count = used_count;
             //     best_disk_id = disk_id;
             //     found = true;

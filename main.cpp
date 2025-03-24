@@ -8,6 +8,7 @@ int T, M, N, V, G;
 std::vector<std::vector<int>> conflict_matrix; // 冲突矩阵
 std::vector<int> tag_conflict_sum; // 从 1 到 M，有 M 行
 TagManager tagmanager(0, 0, 0);
+std::vector<std::vector<int>> write_conflict_matrix; // 写冲突矩阵
 
 int current_max_request_id = 0; // 记录目前已处理的最大请求id
 
@@ -26,6 +27,7 @@ void preprocess() {
     std::vector<std::vector<int>> sum(M + 1, std::vector<int>(slicing_count + 1, 0)); // 对象累积总大小
     std::vector<std::vector<int>> read_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 读取矩阵
     conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 冲突矩阵
+    write_conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 写冲突矩阵
     tag_conflict_sum.resize(M + 1, 0); // 标签冲突数
 
     // fre_del
@@ -61,6 +63,18 @@ void preprocess() {
             sum[i][j] = sum[i][j - 1] + fre_write[i][j] - fre_del[i][j - 1];
             // 确保累积值不为负数
             if (sum[i][j] < 0) sum[i][j] = 0;
+        }
+    }
+
+    // 计算写入矩阵（仅用于初始化）（根据写入阈值）
+    for (int a = 1; a <= M; a++) {
+        for (int b = 1; b <= M; b++) {
+            if (a == b) continue; // 不计算自身冲突
+            int write_conflict_count = 0;
+            for (int j = 1; j <= slicing_count; j++) {
+                write_conflict_count += fre_write[a][j] + fre_write[b][j];
+            }
+            write_conflict_matrix[a][b] = static_cast<int>(std::ceil(static_cast<double>(write_conflict_count) / WRITE_THRESHOLD));
         }
     }
 

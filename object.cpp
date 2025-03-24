@@ -13,7 +13,7 @@ Object::Object(int id, int size, int tag_id)
     , request_num(0) {}
     
 
-
+// 写策略1：采用散写策略
 // bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
 //     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
 //     int current_write_point = 0;    // 当前写入大小
@@ -44,6 +44,7 @@ Object::Object(int id, int size, int tag_id)
 //     return false;
 // }
 
+// 写策略2：先尝试连续写，再采用散写策略
 bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 检查副本索引
     int disk_capacity = disk.get_capacity();
@@ -243,6 +244,10 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
         return true;
     };
 
+    // // ========== Lambda：在某个标签数量的区间集合中求出变量最大值 ==========
+    // auto calculate_max = [&](std::set<std::pair<int, int>>& from_set, int expected_tag_count) {
+    // };
+
     // ========== Lambda：从某个标签数量的区间集合中选出最优的区间块 ==========
     auto try_allocate_from_tag_partitions =
         [&](std::set<std::pair<int, int>>& from_set,
@@ -258,6 +263,53 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
             int best_disk_tag_partition_count = std::numeric_limits<int>::max(); // 该硬盘已分配标签的区间块数量,越小越好
             int best_residual = -1;                                     // 该区间块剩余容量,越大越好      
             
+            // 计算最大值
+            int max_inner_conflict = std::numeric_limits<int>::min();   //最大内部冲突值
+            int max_disk_conflict = std::numeric_limits<int>::min();    //最大整盘冲突值
+            int max_count = std::numeric_limits<int>::min();            //最大硬盘上所有标签分区数量的和
+            int max_residual = std::numeric_limits<int>::min();         //最大剩余容量
+
+            // 遍历该集合下所有满足条件的区间块，求变量最大值
+            for (const auto& candidate  : from_set) {
+                int disk_id = candidate.first;
+                int part_id = candidate.second;
+                if (tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id)) continue;  // 该区间块包含该对象标签，跳过
+                if (!can_use(disk_id, part_id)) continue;   // 该区间块不满足条件，跳过
+                const auto& tags = tag_manager.disk_partition_usage_tagkind[disk_id][part_id];
+                // if ((int)tags.size() != expected_tag_count) continue;   
+                // 不是当前标签数量的区间块，跳过 
+                if (expected_tag_count < 4) {
+                    if ((int)tags.size() != expected_tag_count) continue;
+                } else {
+                    if ((int)tags.size() < expected_tag_count) continue;
+                }
+
+                // 计算区间内部冲突值：当前对象标签与该区间中所有标签的冲突值之和
+                int inner_conflict = 0; 
+                for (int t : tags) {
+                    inner_conflict += conflict_matrix[tag_id][t]; // inner_conflict有可能还是0
+                }
+                if (inner_conflict > max_inner_conflict) max_inner_conflict = inner_conflict;
+
+                // 计算整盘冲突值：当前对象标签与该磁盘上所有已分配标签的冲突值之和
+                int disk_conflict = 0;
+                for (int t : tag_manager.disk_tag_kind[disk_id]) {
+                    disk_conflict += conflict_matrix[tag_id][t];
+                }
+                if (disk_conflict > max_disk_conflict) max_disk_conflict = disk_conflict;
+
+                // 计算该硬盘上所有标签分区数量的和（越小代表该磁盘负载越低），可能会超20，但不影响选择
+                int disk_tag_partition_count = 0;
+                for (const auto& entry : tag_manager.disk_tag_partition_num[disk_id]) {
+                    disk_tag_partition_count += entry.second;
+                }
+                if (disk_tag_partition_count > max_count) max_count = disk_tag_partition_count;
+
+                // 获取该区间块剩余容量
+                int residual = disks[disk_id].get_residual_capacity(part_id);
+                if (residual > max_residual) max_residual = residual;
+            }
+
             // 遍历该集合下所有满足条件的区间块
             for (const auto& candidate  : from_set) {
                 int disk_id = candidate.first;
@@ -294,16 +346,35 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                 // 获取该区间块剩余容量
                 int residual = disks[disk_id].get_residual_capacity(part_id);
 
-                // // 为标签选择新区间块的策略1：
-                // // 1. inner_conflict 越大越好
-                // // 2. 若相同，则 disk_conflict 越小越好
-                // // 3. 若仍相同，则 disk_tag_partition_count 越小越好
-                // // 4. 最后选 residual 越大越好
+                // 为标签选择新区间块的策略1：
+                // 1. inner_conflict 越大越好
+                // 2. 若相同，则 disk_conflict 越小越好
+                // 3. 若仍相同，则 disk_tag_partition_count 越小越好
+                // 4. 最后选 residual 越大越好
+                if (!found ||
+                    (inner_conflict > best_inner_conflict) ||
+                    (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                    (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
+                ) {
+                    best_partition = candidate;
+                    best_inner_conflict = inner_conflict;
+                    best_disk_conflict = disk_conflict;
+                    best_disk_tag_partition_count = disk_tag_partition_count;
+                    best_residual = residual;
+                    found = true;
+                }
+
+                // // 为标签选择新区间块的策略2：
+                // // 1. disk_tag_partition_count 越小越好
+                // // 2. 若相同，则 inner_conflict 越大越好
+                // // 3. 若相同，则 disk_conflict 越小越好
+                // // 4. 若相同，则 residual 越大越好
                 // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
+                //     (disk_tag_partition_count < best_disk_tag_partition_count) ||       
+                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual)
                 // ) {
                 //     best_partition = candidate;
                 //     best_inner_conflict = inner_conflict;
@@ -313,24 +384,26 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                 //     found = true;
                 // }
 
-                // 为标签选择新区间块的策略：
-                // 1. disk_tag_partition_count 越小越好
-                // 2. 若相同，则 inner_conflict 越大越好
-                // 3. 若相同，则 disk_conflict 越小越好
-                // 4. 若相同，则 residual 越大越好
-                if (!found ||
-                    (disk_tag_partition_count < best_disk_tag_partition_count) ||       
-                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
-                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual)
-                ) {
-                    best_partition = candidate;
-                    best_inner_conflict = inner_conflict;
-                    best_disk_conflict = disk_conflict;
-                    best_disk_tag_partition_count = disk_tag_partition_count;
-                    best_residual = residual;
-                    found = true;
-                }
+                // // 为标签选择新区间块的策略3：
+                // // double score = -w1 * norm_count - w2 * norm_disk_conflict + w3 * norm_inner_conflict + w4 * norm_residual;
+                // // 设置权重（可根据实际情况调优）
+                // double best_score = -std::numeric_limits<double>::max();
+                // double w1 = 1.0; // 权重1：对硬盘已分配区间块数量的惩罚（越小越好）
+                // double w2 = 1.0; // 权重2：对整盘冲突值的惩罚（越小越好）
+                // double w3 = 1.0; // 权重3：对区间内部冲突值的奖励（越大越好）
+                // double w4 = 1.0; // 权重4：对剩余容量的奖励（越大越好）
+                // double norm_count = static_cast<double>(disk_tag_partition_count) / max_count;
+                // double norm_inner_conflict = static_cast<double>(inner_conflict) / max_inner_conflict;
+                // double norm_disk_conflict = static_cast<double>(disk_conflict) / max_disk_conflict;
+                // double norm_residual = static_cast<double>(residual) / max_residual;
+                // double score = -w1 * norm_count - w2 * norm_disk_conflict + w3 * norm_inner_conflict + w4 * norm_residual;
+                // if (!found ||
+                //     (score > best_score)
+                // ) {
+                //     best_partition = candidate;
+                //     best_score = score;
+                //     found = true;
+                // }
             }
 
             // 找到了合适的区间块，更新所有信息

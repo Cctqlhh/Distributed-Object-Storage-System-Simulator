@@ -14,34 +14,91 @@ Object::Object(int id, int size, int tag_id)
     
 
 
-bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
-    assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
-    int current_write_point = 0;    // 当前写入大小
-    int disk_capacity = disk.get_capacity();
+// bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
+//     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
+//     int current_write_point = 0;    // 当前写入大小
+//     int disk_capacity = disk.get_capacity();
   
-    // 预分配空间，避免多次重新分配
-    std::vector<int> positions;
-    positions.reserve(size);
+//     // 预分配空间，避免多次重新分配
+//     std::vector<int> positions;
+//     positions.reserve(size);
     
-    // 先找到所有空闲位置，减少磁盘操作次数
+//     // 先找到所有空闲位置，减少磁盘操作次数
+//     for (int i = start_pos; i <= end_pos; i++) {
+// //     for (int i = 1; i <= disk_capacity && current_write_point < size; i++) {
+//         if (disk.is_free(i)) {
+//             if (disk.write(i, object_id)) {
+//                 unit_pos[replica_idx][++current_write_point] = i;
+//                 // 写入完毕
+//                 if (current_write_point == size) {
+//                     replica_disks[replica_idx] = disk.get_id();
+//                     // 减小区间块剩余大小 replica_idx 为1-3
+//                     disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+//                     return true;
+//                 }
+//             }
+//         }
+//     }
+//     // 这里不可能写入失败，如果写入失败，直接报错
+//     assert(current_write_point == size && "The write operation failed.");
+//     return false;
+// }
+
+bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
+    assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 检查副本索引
+    int disk_capacity = disk.get_capacity();
+
+    // 尝试连续写：扫描[start_pos, end_pos]寻找连续空闲区间块，长度等于size
+    int contiguous_start = -1;
+    int current_streak = 0;
     for (int i = start_pos; i <= end_pos; i++) {
-//     for (int i = 1; i <= disk_capacity && current_write_point < size; i++) {
         if (disk.is_free(i)) {
-            if (disk.write(i, object_id)) {
-                unit_pos[replica_idx][++current_write_point] = i;
-                // 写入完毕
-                if (current_write_point == size) {
-                    replica_disks[replica_idx] = disk.get_id();
-                    // 减小区间块剩余大小 replica_idx 为1-3
-                    disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
-                    return true;
+            if (current_streak == 0) {
+                contiguous_start = i;  // 标记连续区间开始位置
+            }
+            current_streak++;
+            if (current_streak == size) {
+                break; // 找到足够长度的连续区间
+            }
+        } else {
+            // 如果遇到非空闲位置，重置计数
+            current_streak = 0;
+            contiguous_start = -1;
+        }
+    }
+
+    if (current_streak == size) {
+        // 如果找到了连续区间，则连续写入
+        for (int i = contiguous_start; i < contiguous_start + size; i++) {
+            if (!disk.write(i, object_id)) {
+                assert(false && "Contiguous write failed unexpectedly");
+                return false;
+            }
+            // 记录写入的存储位置，注意这里下标从1开始
+            unit_pos[replica_idx][i - contiguous_start + 1] = i;
+        }
+        replica_disks[replica_idx] = disk.get_id();
+        disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+        return true;
+    } else {
+        // 如果没有找到连续空闲区域，则采用原来的散写策略
+        int current_write_point = 0;
+        for (int i = start_pos; i <= end_pos; i++) {
+            if (disk.is_free(i)) {
+                if (disk.write(i, object_id)) {
+                    unit_pos[replica_idx][++current_write_point] = i;
+                    if (current_write_point == size) {
+                        replica_disks[replica_idx] = disk.get_id();
+                        disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+                        return true;
+                    }
                 }
             }
         }
+        // 理论上不应该走到这里，写入失败直接断言
+        assert(current_write_point == size && "The write operation failed.");
+        return false;
     }
-    // 这里不可能写入失败，如果写入失败，直接报错
-    assert(current_write_point == size && "The write operation failed.");
-    return false;
 }
 
 void Object::delete_replica(int replica_idx, Disk& disk) {

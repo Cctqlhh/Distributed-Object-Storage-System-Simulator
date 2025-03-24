@@ -24,7 +24,7 @@ void preprocess() {
     std::vector<std::vector<int>> fre_write(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> fre_read(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> sum(M + 1, std::vector<int>(slicing_count + 1, 0)); // 对象累积总大小
-    std::vector<std::vector<int>> write_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 写入矩阵
+    std::vector<std::vector<int>> read_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 读取矩阵
     conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 冲突矩阵
     tag_conflict_sum.resize(M + 1, 0); // 标签冲突数
 
@@ -64,24 +64,48 @@ void preprocess() {
         }
     }
 
-    // 计算写入矩阵（根据热度阈值）
+    // 计算读取矩阵（根据热度阈值）
     for (int i = 1; i <= M; i++) {
         for (int j = 1; j <= slicing_count; j++) {
-            write_matrix[i][j] = (fre_write[i][j] >= HEAT_THRESHOLD) ? 1 : 0;
+            read_matrix[i][j] = (fre_read[i][j] >= HEAT_THRESHOLD) ? 1 : 0;
         }
     }
 
-    // 计算冲突矩阵
+    // // 计算冲突矩阵1：根据读取矩阵
+    // for (int a = 1; a <= M; a++) {
+    //     for (int b = 1; b <= M; b++) {
+    //         if (a == b) continue; // 不计算自身冲突
+    //         int conflict_count = 0;
+    //         for (int j = 1; j <= slicing_count; j++) {
+    //             if (read_matrix[a][j] == 1 && read_matrix[b][j] == 1) {
+    //                 conflict_count++;
+    //             }
+    //         }
+    //         conflict_matrix[a][b] = conflict_count;
+    //     }
+    // }
+
+    // // 计算冲突矩阵2：根据 fre_read
+    // for (int a = 1; a <= M; a++) {
+    //     for (int b = 1; b <= M; b++) {
+    //         if (a == b) continue; // 不计算自身冲突
+    //         int conflict_count = 0;
+    //         for (int j = 1; j <= slicing_count; j++) {
+    //             conflict_count += fre_read[a][j] + fre_read[b][j];
+    //         }
+    //         conflict_matrix[a][b] = conflict_count;
+    //     }
+    // }
+
+    // 计算冲突矩阵3：根据 fre_read,且每 HEAT_THRESHOLD 进行量化
     for (int a = 1; a <= M; a++) {
         for (int b = 1; b <= M; b++) {
             if (a == b) continue; // 不计算自身冲突
             int conflict_count = 0;
             for (int j = 1; j <= slicing_count; j++) {
-                if (write_matrix[a][j] == 1 && write_matrix[b][j] == 1) {
-                    conflict_count++;
-                }
+                conflict_count += fre_read[a][j] + fre_read[b][j];
             }
-            conflict_matrix[a][b] = conflict_count;
+            conflict_matrix[a][b] = static_cast<int>(std::ceil(static_cast<double>(conflict_count) / HEAT_THRESHOLD));
         }
     }
 
@@ -105,6 +129,25 @@ void preprocess() {
     // tagmanager.calculate_tag_disk_requirement(sum, conflict_matrix, disks);
     // tagmanager.allocate_tag_disk_requirement(disks);
     tagmanager.init(sum, conflict_matrix, disks);
+
+    // 打印---------------------------------------------------------------------
+    // 遍历每个磁盘
+    for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
+        int total_tags = 0;
+        for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
+            total_tags += tag_pair.second;
+        }
+        std::cerr << "disk " << disk_id << "  total_tags: " << total_tags << std::endl;
+    }
+
+    // // 遍历每个磁盘
+    // for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
+    //     int total_tags = 0;
+    //     for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
+    //         std::cerr << "disk " << disk_id << " tag: "<< tag_pair.first << "  total_tags: " << tag_pair.second << std::endl;
+    //     }
+    // }
+
     tagmanager.compute_delete_prob(sum, fre_del); // 计算删除概率
 
     // 预处理结束

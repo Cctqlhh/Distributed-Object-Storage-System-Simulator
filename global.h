@@ -28,10 +28,10 @@ class TagManager;
 #define MAX_OBJECT_NUM (100000 + 1)
 #define FRE_PER_SLICING (1800)
 #define EXTRA_TIME (105)
-#define HEAT_THRESHOLD 25000 // 设定热度阈值
-#define PARTITION_ALLOCATION_THRESHOLD 20 // 选取第20个时间片组进行分配
+#define HEAT_THRESHOLD 25000                // 设定热度阈值
+#define PARTITION_ALLOCATION_THRESHOLD 20   // 选取第20个时间片组进行分配
 #define REP_NUM 3
-#define DISK_PARTITIONS 22  // 定义硬盘分区数
+#define DISK_PARTITIONS 22                  // 定义硬盘分区数
 #define SCALE 0.3                           // 选择初始存储需求的比例因子
 #define MAX_PARTITIONS_PER_TAG 10           // 同一个标签在一个磁盘上的最多区间块数
 

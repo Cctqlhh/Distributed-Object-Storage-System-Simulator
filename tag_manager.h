@@ -13,6 +13,7 @@
 class TagManager {
 public:
     std::vector<std::vector<double>> tag_delete_prob;      // 记录每个标签的区间块分配情况
+
     // 使用：初始分配
     // 更新：无
     // 初始设定标签映射硬盘时，每个标签映射三个磁盘 M * 3，数值为 硬盘号
@@ -76,9 +77,7 @@ public:
     // 当标签使用新区间块时更新，在删除干净整个标签时更新
     std::set<std::pair<int, int>> more_tag_partitions; // 其中set基于硬盘号升序排列,其次基于区间块号升序排列 
 
-
-
-//     TagManager(int M, int N);  
+    
     TagManager(int M = 0, int N = 0, int slicing_count = 0);
 
     // 计算每个标签的初始分配磁盘和所需区间块数量

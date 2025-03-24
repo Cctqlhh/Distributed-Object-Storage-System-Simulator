@@ -171,8 +171,57 @@ void TagManager::allocate_tag_disk_requirement(std::vector<Disk>& disks) {
 }
 
 void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vector<std::vector<int>>& conflict_matrix, std::vector<Disk>& disks) {
+    // 初始化局部变量
+    std::vector<int> tag_required_blocks(M + 1, 0);                     // 每个标签需要的初始划分区间块数量
+    std::vector<int> disk_remaining_partitions(N + 1, DISK_PARTITIONS); // 每个硬盘剩余区间块
+    std::vector<bool> disk_used(N + 1, false);                          // 记录硬盘是否已被占用
     
+    // 清空属性
+    for (auto& s : disk_tag_kind) s.clear();                            // 清空硬盘上的标签数量
+
+    // 计算每个标签需要的最小区间块数
+    for (int i = 1; i <= M; i++) { 
+        int max_storage = SCALE * sum[i][std::min(PARTITION_ALLOCATION_THRESHOLD, (int)sum[i].size() - 1)];
+        tag_required_blocks[i] = std::ceil((double)max_storage / disks[1].get_partition_size());
+    }
+    
+    // 遍历标签，为每个标签分配三个硬盘 
+    std::vector<int> indices(M);
+    for (int i = 0; i < M; ++i) {
+        indices[i] = i + 1;
+    }
+    // 根据 tag_conflict_sum 降序排序索引
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        return tag_conflict_sum[a] > tag_conflict_sum[b];
+    });
+    // 优先给最冲突的标签分配硬盘,indices[i]为标签索引
+    for (int i = 0; i < M; i++) {
+        std::unordered_set<int> selected_disks;             // 记录已选择的硬盘 最多3个(可以小于3个)
+        selected_disks.clear();
+
+        // 优先选择空硬盘
+        for (int disk_id = 1; disk_id <= N; disk_id++) {
+            if (disk_used[disk_id]) continue;
+            if (selected_disks.count(disk_id)) continue; // 不能重复选择硬盘
+            if (disk_remaining_partitions[disk_id] < tag_required_blocks[indices[i]]) continue; // 剩余区间块不足
+            // 更新分配信息
+            disk_used[disk_id] = true;          // 标记该硬盘已被占用
+            selected_disks.insert(disk_id);     // 记录已选择的硬盘
+            // 维护属性
+            disk_tag_kind[disk_id].insert(indices[i]);
+            
+
+            if (selected_disks.size() == REP_NUM) break; // 已经选择了3个硬盘，退出循环
+        }
+
+        // 如果没有找到空的硬盘，再寻找已经使用的硬盘
+
+            
+        }
+
+        // 如果没有找到完全空闲的硬盘，再寻找低冲突硬盘
 }
+
 
 void TagManager::update_tag_info_after_init(const std::vector<Disk>& disks) {
 

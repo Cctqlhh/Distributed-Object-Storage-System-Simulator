@@ -85,19 +85,19 @@ void preprocess() {
         }
     }
 
-    // // 计算冲突矩阵1：根据读取矩阵
-    // for (int a = 1; a <= M; a++) {
-    //     for (int b = 1; b <= M; b++) {
-    //         if (a == b) continue; // 不计算自身冲突
-    //         int conflict_count = 0;
-    //         for (int j = 1; j <= slicing_count; j++) {
-    //             if (read_matrix[a][j] == 1 && read_matrix[b][j] == 1) {
-    //                 conflict_count++;
-    //             }
-    //         }
-    //         conflict_matrix[a][b] = conflict_count;
-    //     }
-    // }
+    // 计算冲突矩阵1：根据读取矩阵
+    for (int a = 1; a <= M; a++) {
+        for (int b = 1; b <= M; b++) {
+            if (a == b) continue; // 不计算自身冲突
+            int conflict_count = 0;
+            for (int j = 1; j <= slicing_count; j++) {
+                if (read_matrix[a][j] == 1 && read_matrix[b][j] == 1) {
+                    conflict_count++;
+                }
+            }
+            conflict_matrix[a][b] = conflict_count;
+        }
+    }
 
     // // 计算冲突矩阵2：根据 fre_read
     // for (int a = 1; a <= M; a++) {
@@ -111,17 +111,17 @@ void preprocess() {
     //     }
     // }
 
-    // 计算冲突矩阵3：根据 fre_read,且每 HEAT_THRESHOLD 进行量化
-    for (int a = 1; a <= M; a++) {
-        for (int b = 1; b <= M; b++) {
-            if (a == b) continue; // 不计算自身冲突
-            int conflict_count = 0;
-            for (int j = 1; j <= slicing_count; j++) {
-                conflict_count += fre_read[a][j] + fre_read[b][j];
-            }
-            conflict_matrix[a][b] = static_cast<int>(std::ceil(static_cast<double>(conflict_count) / HEAT_THRESHOLD));
-        }
-    }
+    // // 计算冲突矩阵3：根据 fre_read,且每 HEAT_THRESHOLD 进行量化
+    // for (int a = 1; a <= M; a++) {
+    //     for (int b = 1; b <= M; b++) {
+    //         if (a == b) continue; // 不计算自身冲突
+    //         int conflict_count = 0;
+    //         for (int j = 1; j <= slicing_count; j++) {
+    //             conflict_count += fre_read[a][j] + fre_read[b][j];
+    //         }
+    //         conflict_matrix[a][b] = static_cast<int>(std::ceil(static_cast<double>(conflict_count) / HEAT_THRESHOLD));
+    //     }
+    // }
 
     // 计算每个标签的冲突数
     for (int i = 1; i <= M; i++) {
@@ -144,15 +144,15 @@ void preprocess() {
     // tagmanager.allocate_tag_disk_requirement(disks);
     tagmanager.init(sum, conflict_matrix, disks);
 
-    // 打印---------------------------------------------------------------------
-    // 遍历每个磁盘
-    for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
-        int total_tags = 0;
-        for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
-            total_tags += tag_pair.second;
-        }
-        std::cerr << "disk " << disk_id << "  total_tags: " << total_tags << std::endl;
-    }
+    // // 打印---------------------------------------------------------------------
+    // // 遍历每个磁盘
+    // for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
+    //     int total_tags = 0;
+    //     for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
+    //         total_tags += tag_pair.second;
+    //     }
+    //     std::cerr << "disk " << disk_id << "  total_tags: " << total_tags << std::endl;
+    // }
 
     // // 遍历每个磁盘
     // for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {

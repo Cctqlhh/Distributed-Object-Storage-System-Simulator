@@ -125,11 +125,12 @@ void TagManager::calculate_tag_disk_requirement(const std::vector<std::vector<in
 void TagManager::allocate_tag_disk_requirement(std::vector<Disk>& disks) {
     // 清空硬盘上的标签及其区间块数量
     for (auto& s : disk_tag_kind) s.clear();                // 清空硬盘上的标签数量
-    for (int disk_id = 1; disk_id <= N; disk_id++) {
-        for (int tag = 1; tag <= M; tag++) {
-            disk_tag_partition_num[disk_id][tag] = 0;
-        }
-    }
+    for (auto& m : disk_tag_partition_num) m.clear();       // 清空硬盘上的标签及其区间块数量
+    // for (int disk_id = 1; disk_id <= N; disk_id++) {
+    //     for (int tag = 1; tag <= M; tag++) {
+    //         disk_tag_partition_num[disk_id][tag] = 0;
+    //     }
+    // }
     for (auto& n : tag_disk_partition) n.clear();           // 清空标签分配的所有硬盘id和区间块id
 
     // 初始化清空四个集合
@@ -194,6 +195,8 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
         }
     }
     for (auto& s : disk_tag_kind) s.clear();                // 清空硬盘上的标签数量
+    // 下面两个效果相同：对于 int 来说默认就是 0，因此，两种方法在后续访问时都能确保未存在的键对应的值是 0
+    // for (auto& m : disk_tag_partition_num) m.clear();       // 清空硬盘上的标签及其区间块数量
     for (int disk_id = 1; disk_id <= N; disk_id++) {
         for (int tag = 1; tag <= M; tag++) {
             disk_tag_partition_num[disk_id][tag] = 0;
@@ -227,7 +230,9 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             if (allocated == std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id])) break; // 分配足够的区间块后退出
         }
         disk_tag_kind[disk_id].insert(tag);
-        disk_tag_partition_num[disk_id][tag] += std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
+        // += ：28238334.56 =：
+        // disk_tag_partition_num[disk_id][tag] += std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
+        disk_tag_partition_num[disk_id][tag] = std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
         // 更新变量
         disk_first_empty_partition[disk_id] += std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
         disk_remaining_partitions[disk_id] = std::max(disk_remaining_partitions[disk_id] - tag_required_blocks[tag], 0);
@@ -247,7 +252,7 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
         int best_used_count = std::numeric_limits<int>::max();                      // 记录最佳硬盘使用的区间块数量
         for (int disk_id = 1; disk_id <= N; disk_id++) {
             if (selected_disks.count(disk_id)) continue;
-            if (disk_tag_partition_num[disk_id][tag] > MAX_PARTITIONS_PER_TAG) continue;        // 不允许该标签在该硬盘上的区间块数超出上限
+            // if (disk_tag_partition_num[disk_id][tag] > MAX_PARTITIONS_PER_TAG) continue;        // 不允许该标签在该硬盘上的区间块数超出上限
             if (mode == 0) {
                 if (disk_remaining_partitions[disk_id] < tag_required_blocks[tag]) continue;    // 剩余区间块不足
             }
@@ -301,11 +306,19 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             //     best_disk_id = disk_id;
             //     found = true;
             // }
+
+            // 无脑添加第一个硬盘
+            if (found) {
+                update_tag_info_after_init(best_disk_id, tag);
+                if (selected_disks.size() == REP_NUM) return; // 已经选择了3个硬盘，返回
+            }
         }
-        if (found) {
-            update_tag_info_after_init(best_disk_id, tag);
-            if (selected_disks.size() == REP_NUM) return; // 已经选择了3个硬盘，返回
-        }
+        // // 遍历完成后的最佳硬盘选择
+        // if (found) {
+        //     update_tag_info_after_init(best_disk_id, tag);
+        //     if (selected_disks.size() == REP_NUM) return; // 已经选择了3个硬盘，返回
+        // }
+
     };
 
     // 计算每个标签需要的最小区间块数
@@ -395,9 +408,10 @@ void TagManager::update_tag_info_after_write(const Object& object) {
         disk_partition_usage_tagnum[disk_id][part_id][tag] += 1;
         if (disk_partition_usage_tagnum[disk_id][part_id][tag] == 1) {
             disk_partition_usage_tagkind[disk_id][part_id].insert(tag);
+            // disk_tag_partition_num[disk_id][tag]++;     // 现版本 
         }
         disk_tag_kind[disk_id].insert(tag);
-        disk_tag_partition_num[disk_id][tag]++;
+        disk_tag_partition_num[disk_id][tag]++;     // 原版本 
         tag_disk_partition[tag][disk_id].push_back(part_id);
     }
 }

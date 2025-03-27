@@ -230,7 +230,7 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             if (allocated == std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id])) break; // 分配足够的区间块后退出
         }
         disk_tag_kind[disk_id].insert(tag);
-        // += ：28238334.56 =：
+        // += ：28238334.56 =：分更高
         // disk_tag_partition_num[disk_id][tag] += std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
         disk_tag_partition_num[disk_id][tag] = std::min(tag_required_blocks[tag], disk_remaining_partitions[disk_id]);
         // 更新变量
@@ -401,20 +401,39 @@ void TagManager::update_tag_info_after_delete(const Object& object) {
     }
 }
 
+// 原版本
 void TagManager::update_tag_info_after_write(const Object& object) {
     int tag = object.get_tag_id();
     const auto& chosen_partitions = object.get_chosen_partitions();
     for (const auto& [disk_id, part_id] : chosen_partitions) {
-        disk_partition_usage_tagnum[disk_id][part_id][tag] += 1;
+        disk_partition_usage_tagnum[disk_id][part_id][tag] += 1;              
         if (disk_partition_usage_tagnum[disk_id][part_id][tag] == 1) {
-            disk_partition_usage_tagkind[disk_id][part_id].insert(tag);
-            // disk_tag_partition_num[disk_id][tag]++;     // 现版本 
+            disk_partition_usage_tagkind[disk_id][part_id].insert(tag);  
         }
         disk_tag_kind[disk_id].insert(tag);
-        disk_tag_partition_num[disk_id][tag]++;     // 原版本 
+        disk_tag_partition_num[disk_id][tag]++;
         tag_disk_partition[tag][disk_id].push_back(part_id);
     }
 }
+
+// // 修改问题？？？
+// void TagManager::update_tag_info_after_write(const Object& object) {
+//     int tag = object.get_tag_id();
+//     const auto& chosen_partitions = object.get_chosen_partitions();
+//     for (const auto& [disk_id, part_id] : chosen_partitions) {
+//         disk_partition_usage_tagnum[disk_id][part_id][tag] += 1;
+        
+//         // 初始化的特殊情况处理？？？？？？？？？？？  预留情况和真正第一次写入情况？？？
+//         // 该标签在该区间块的对象个数加到1，第一次使用该区间块     
+//         if (disk_partition_usage_tagnum[disk_id][part_id][tag] == 1) {  // 现版本                
+//             disk_partition_usage_tagkind[disk_id][part_id].insert(tag);  
+//             disk_tag_partition_num[disk_id][tag]++;     // 现版本 
+//             tag_disk_partition[tag][disk_id].push_back(part_id); // 现版本
+//             disk_tag_kind[disk_id].insert(tag);            // 现版本
+//         }
+//     }
+// }
+
 
 void TagManager::compute_delete_prob(const std::vector<std::vector<int>>& sum, 
     const std::vector<std::vector<int>>& fre_del){

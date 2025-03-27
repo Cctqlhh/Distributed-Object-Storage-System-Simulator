@@ -10,18 +10,20 @@ Object::Object(int id, int size, int tag_id)
     , replica_disks(REP_NUM + 1)
     , unit_pos(REP_NUM + 1, std::vector<int>(size + 1))
     , partition_id(REP_NUM + 1)
-    , request_num(0) {}
+    , request_num(0)
+    , is_continue(REP_NUM + 1) {}
     
 
 // 写策略1：采用散写策略
 bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
+  
     int current_write_point = 0;    // 当前写入大小
     int disk_capacity = disk.get_capacity();
-  
     // 预分配空间，避免多次重新分配
     std::vector<int> positions;
     positions.reserve(size);
+    bool continuous = true;   // 默认连续写
     
     // 先找到所有空闲位置，减少磁盘操作次数
     for (int i = start_pos; i <= end_pos; i++) {
@@ -34,9 +36,13 @@ bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_p
                     replica_disks[replica_idx] = disk.get_id();
                     // 减小区间块剩余大小 replica_idx 为1-3
                     disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+                    is_continue[replica_idx] = continuous;
                     return true;
                 }
             }
+        } else {
+            // 只要遇到非空闲位置，该副本就是散插
+            continuous = false; 
         }
     }
     // 这里不可能写入失败，如果写入失败，直接报错

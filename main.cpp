@@ -322,18 +322,20 @@ void read_action(int t)
                 i++;
                 continue;
             }
-            if(part_p == disks[i].part_p){ // 还是原来分区
-                assert(disks[i].part_p);
-                auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
-                if(disks[i].part_p->next == second_part_p && second_part_p->score > 0){ // 如果是下一个分区，先操作下一个分区(下一个分区有分数的话)
-                    disks[i].part_p = second_part_p;
-                    part_p = second_part_p;
-                }else{
-                    disks[i].part_p = part_p; // 更新当前分区
-                }
-            }else{
-                disks[i].part_p = part_p; // 更新当前分区
-            }
+            
+            disks[i].part_p = part_p; // 更新当前分区
+            // if(part_p == disks[i].part_p){ // 还是原来分区
+            //     assert(disks[i].part_p);
+            //     auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
+            //     if(disks[i].part_p->next == second_part_p && second_part_p->score > 0){ // 如果是下一个分区，先操作下一个分区(下一个分区有分数的话)
+            //         disks[i].part_p = second_part_p; // 更新为第二分区
+            //         part_p = second_part_p;     // 更新为第二分区
+            //     }else{
+            //         disks[i].part_p = part_p; // 更新当前分区
+            //     }
+            // }else{
+            //     disks[i].part_p = part_p; // 更新当前分区
+            // }
         }
         
         // 取出存储了对象的位置vector

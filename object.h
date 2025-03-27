@@ -22,6 +22,7 @@ private:
     std::vector<int> partition_id;              // 每个副本的存储单元所属的分区编号
     int request_num;
     std::vector<int> active_requests;           // 存储当前对象正在处理的请求id
+    std::vector<bool> is_continue;              // 对象的连续性标记
 
 public:
     Object(int id = 0, int size = 0, int tag_id = 0);

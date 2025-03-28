@@ -6,23 +6,39 @@
 struct PartitionInfo {
     int start;  // 该区间块的起始位置（存储单元索引）
     int size;   // 该区间块的大小
-    float score;  // 该区间块的优先级得分
+    double score;  // 该区间块的优先级得分
+    int head_position;
     size_t heap_index; // 该区间块在堆中的索引
     PartitionInfo* next;  // 指向下一个区间块的指针
     // std::vector<int> need_read;  // 该区间块的每个存储单元是否需要读，需要读取的次数
     // std::vector<int> object_ids;    // 该区间块存储的所有对象id
     
-    PartitionInfo() : start(0), size(0), score(0) {}  // 默认构造函数
+    PartitionInfo() : start(0), size(0), score(0), head_position(0) {}  // 默认构造函数
     // PartitionInfo(int s, int sz) : start(s), size(sz), score(0), need_read(sz, 0) {}  // 带参数的构造函数
-    PartitionInfo(int s, int sz) : start(s), size(sz), score(0) {}  // 带参数的构造函数
+    PartitionInfo(int s, int sz, int head) : start(s), size(sz), score(0), head_position(head) {}  // 带参数的构造函数
     
+    int get_distance_to_head(int position) const // 返回目标位置到磁头的距离（存储单元数（对象块数））== pass token消耗
+    {
+        // assert(position > 0 && position <= capacity);
+        if(position < head_position)
+            return V - head_position + position;
+        else return position - head_position;
+    }
+
     // 重载 < 运算符，用于排序
     bool operator<(const PartitionInfo& other) const {
-        return score < other.score;
+        if(score < other.score){
+            return true;
+        }
+        else if(score == other.score){
+           return get_distance_to_head(start) < get_distance_to_head(other.start);
+        }
+        else return false;
+        // return score < other.score;
     }
     // 重载 == 运算符，用于判断两个 PartitionInfo 对象是否相等
     bool operator==(const PartitionInfo& other) const {
-        return score == other.score;
+        return score == other.score && start == other.start;
     }
 };
 
@@ -163,6 +179,7 @@ public:
     const PartitionInfo* part_p;  // 当前操作的区间块指针
     
     bool last_ok;
+    std::unordered_set<int> curr_obj;
     Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
 
@@ -229,8 +246,9 @@ public:
 
     void increase_residual_capacity(int partition_id, int size); // 增加区间块的剩余容量
     void reflash_partition_score();
+    void update_partition_head(int part_id, int head);
     // int update_partition_info(int partition_id, const Request & req);
-    void update_partition_info(int partition_id, float score);
+    void update_partition_info(int partition_id, double score);
     
     bool head_is_free() const{
         return head_free;

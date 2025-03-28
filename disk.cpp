@@ -12,6 +12,7 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     , head_free(true)
     , part_p(nullptr)
     , last_ok(true) {
+        curr_obj.clear();
     // 初始化每个存储单元的分区信息
     storage_partition_map.resize(disk_capacity + 1);        // 存储单元编号从 1 到 disk_capacity
     partitions.resize(DISK_PARTITIONS + 1);                 // 分区编号从 1 到 20
@@ -24,7 +25,7 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
         int end = std::min(start + partition_size - 1, capacity); 
 
         // partitions[i] = {start, end - start + 1}; 
-        partitions[i] = PartitionInfo(start, end - start + 1);  // 直接初始化 PartitionInfo()
+        partitions[i] = PartitionInfo(start, end - start + 1, head_position);  // 直接初始化 PartitionInfo()
         partitions[i - 1].next = &partitions[i];  // 设置 next 指针
         residual_capacity[i] = end - start + 1;
         initial_max_capacity[i] = end - start + 1;
@@ -44,46 +45,6 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
 
     initialize_partitions();
 }
-
-// bool Disk::write(int position, int object_id) {
-//     assert(position > 0 && position <= capacity);
-//     storage[position] = object_id;
-//     return true;
-// }
-
-// void Disk::erase(int position) {
-//     assert(position > 0 && position <= capacity);
-//     storage[position] = 0;
-// }
-
-// int Disk::get_head_position() const {
-//     return head_position;
-// }
-
-// bool Disk::is_free(int position) const {
-//     assert(position > 0 && position <= capacity);
-//     return storage[position] == 0;
-// }
-
-// int Disk::get_id() const {
-//     return id;
-// }
-
-// int Disk::get_capacity() const {
-//     return capacity;
-// }
-
-// std::vector<int> Disk::get_storage() const{
-//     return storage;
-// }
-
-// int Disk::get_distance_to_head(int position) const {
-//     assert(position > 0 && position <= capacity);
-//     if(position < head_position)
-//         return capacity - head_position + position;
-//     else return position - head_position;
-// }
-
 
 std::pair<int,int> Disk::get_need_token_to_head(int position) const {
     assert(position > 0 && position <= capacity);
@@ -194,7 +155,12 @@ void Disk::reflash_partition_score(){
     }
     initialize_partitions();
 }
-void Disk::update_partition_info(int partition_id, float score){
+
+void Disk::update_partition_head(int part_id, int head){
+    partitions[part_id].head_position = head;
+}
+
+void Disk::update_partition_info(int partition_id, double score){
     // if (partition_id <= 0 || partition_id > partitions.size() - 1 || score <= 0) return;
     partitions[partition_id].score = score;
     // 调用动态堆 update 操作，调整该分区在堆中的位置

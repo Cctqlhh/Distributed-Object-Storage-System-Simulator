@@ -68,12 +68,21 @@ public:
         return active_requests;
     }
 
+    // void remove_completed_request(int request_id) {
+    //     auto it = std::find(active_requests.begin(), active_requests.end(), request_id);
+    //     if (it != active_requests.end()) {
+    //         active_requests.erase(it);
+    //     }
+    // }
+
     void remove_completed_request(int request_id) {
         auto it = std::find(active_requests.begin(), active_requests.end(), request_id);
         if (it != active_requests.end()) {
-            active_requests.erase(it);
+            *it = active_requests.back();  // 交换到最后
+            active_requests.pop_back();    // 直接删除最后一个
         }
     }
+
 
     // 根据对象标签进行对象写入区间块的选择（确保所有存储规则）
     std::vector<std::pair<int, int>> select_storage_partitions(TagManager& tag_manager,

@@ -261,9 +261,11 @@ void read_action(int t)
     // 每个磁头寻找要读的对象进行读操作  
     for(int i=1; i<=N;){
         assert(i <= N && i >= 1);
+        int head = disks[i].get_head_position();
         // 维护已有请求 应当磁头空闲时候进行维护
         if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
+            disks[i].curr_obj.clear(); // 清空上一轮对象
             bool has_request = false;
             // // 遍历硬盘所有分区对应的所有对象 请求
             // // 遍历硬盘有请求的分区
@@ -271,18 +273,27 @@ void read_action(int t)
             const std::vector<int>& storage_ = disks[i].get_storage(); // 获取硬盘存储单元
             for(int partition_id = 1; partition_id <= PARTITION_ALLOCATION_THRESHOLD; ++partition_id){
                 // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
+                disks[i].update_partition_head(partition_id, head); // 更新分区的磁头位置
                 int start = disks[i].get_partition_start(partition_id);
                 int size = disks[i].get_partition_size(partition_id);
                 const int* subStorage = storage_.data() + start; // 获取分区的存储单元
             
-                float score = 0;
+                int t0 = t;
+                int dis = disks[i].get_distance_to_head(start);
+                if(disks[i].get_cur_tokens() == G && dis > G - 64) t0 += 1; 
+                else if(disks[i].get_cur_tokens() < G && dis > disks[i].get_cur_tokens() - 64) t0 += 2;
+
+                double score = 0;
                 // 遍历分区的所有存储单元  // 后续替换为直接遍历分区的所有对象
                 for(int idx=0; idx < size; ++idx){
+                // 建议改为直接遍历分区对象列表
+                // for(const auto& object_id : partition.object_list) {
                     // if(idx > 0 && subStorage[idx-1] == subStorage[idx]) continue; // 跳过连续相同的存储单元(对象)
                     int object_id = subStorage[idx];
                     if(object_id == 0) continue; // 目标不存在，则跳过
                      // 假设连续存储的,获取size之后用来跳过(后续调整为直接遍历分区的所有对象,不需要考虑size)
-                    idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
+                    // idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
+                    if (!disks[i].curr_obj.insert(object_id).second) continue; // 已经存在，跳过处理
 
                     // 目标存在，获取request信息 
                     auto& active_reqs = objects[object_id].get_active_requests(); // 获取对象的活跃请求列表
@@ -292,7 +303,7 @@ void read_action(int t)
                             ++i;
                             continue;
                         }
-                        score += req.get_score(t);
+                        score += req.get_score(t0);
                     }
                 }
                 if(!has_request && score > 0) has_request = true;
@@ -307,7 +318,7 @@ void read_action(int t)
             disks[i].set_head_busy();
         }
         // 磁头忙（设置好了要读取的对象）进行读取操作
-        int head = disks[i].get_head_position();
+        // int head = disks[i].get_head_position();
         // auto part_p = disks[i].get_top_partition();
         const PartitionInfo* part_p;
         if(!disks[i].last_ok) { // 上次未读取完
@@ -324,18 +335,6 @@ void read_action(int t)
             }
             
             disks[i].part_p = part_p; // 更新当前分区
-            // if(part_p == disks[i].part_p){ // 还是原来分区
-            //     assert(disks[i].part_p);
-            //     auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
-            //     if(disks[i].part_p->next == second_part_p && second_part_p->score > 0){ // 如果是下一个分区，先操作下一个分区(下一个分区有分数的话)
-            //         disks[i].part_p = second_part_p; // 更新为第二分区
-            //         part_p = second_part_p;     // 更新为第二分区
-            //     }else{
-            //         disks[i].part_p = part_p; // 更新当前分区
-            //     }
-            // }else{
-            //     disks[i].part_p = part_p; // 更新当前分区
-            // }
         }
         
         // 取出存储了对象的位置vector

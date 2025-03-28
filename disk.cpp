@@ -13,6 +13,7 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     , part_p(nullptr)
     , last_ok(true) {
         curr_obj.clear();
+        
     // 初始化每个存储单元的分区信息
     storage_partition_map.resize(disk_capacity + 1);        // 存储单元编号从 1 到 disk_capacity
     partitions.resize(DISK_PARTITIONS + 1);                 // 分区编号从 1 到 20
@@ -25,10 +26,11 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
         int end = std::min(start + partition_size - 1, capacity); 
 
         // partitions[i] = {start, end - start + 1}; 
-        partitions[i] = PartitionInfo(start, end - start + 1);  // 直接初始化 PartitionInfo()
+        partitions[i] = PartitionInfo(start, end - start + 1, head_position);  // 直接初始化 PartitionInfo()
         partitions[i - 1].next = &partitions[i];  // 设置 next 指针
         residual_capacity[i] = end - start + 1;
         initial_max_capacity[i] = end - start + 1;
+        // partitions[i].disk = this;
     }
     partitions[DISK_PARTITIONS].next = &partitions[1];  // 首尾相连
 
@@ -195,6 +197,11 @@ void Disk::reflash_partition_score(){
     }
     initialize_partitions();
 }
+
+void Disk::update_partition_head(int part_id, int head){
+    partitions[part_id].head_position = head;
+}
+
 void Disk::update_partition_info(int partition_id, float score){
     // if (partition_id <= 0 || partition_id > partitions.size() - 1 || score <= 0) return;
     partitions[partition_id].score = score;

@@ -21,6 +21,7 @@ private:
 
 public:
     bool is_up;
+    bool is_choose; 
     Request(int req_id = 0, int obj_id = 0, int time = 0, int size = 0);
     void link_to_previous(int prev_id);
     bool is_completed() const;

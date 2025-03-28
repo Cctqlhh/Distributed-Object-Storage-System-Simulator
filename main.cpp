@@ -321,6 +321,7 @@ void read_action(int t)
         // 维护已有请求 应当磁头空闲时候进行维护
         if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
+            disks[i].curr_obj.clear(); // 清空上一轮对象
             bool has_request = false;
             // // 遍历硬盘所有分区对应的所有对象 请求
             // // 遍历硬盘有请求的分区
@@ -339,13 +340,16 @@ void read_action(int t)
                     int object_id = subStorage[idx];
                     if(object_id == 0) continue; // 目标不存在，则跳过
                      // 假设连续存储的,获取size之后用来跳过(后续调整为直接遍历分区的所有对象,不需要考虑size)
-                    idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
+                    // idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象) 
+                    if(disks[i].curr_obj.find(object_id) != disks[i].curr_obj.end()) continue; // 跳过已经读取的对象
+                    disks[i].curr_obj.insert(object_id);
 
                     // 目标存在，获取request信息 
                     auto& active_reqs = objects[object_id].get_active_requests(); // 获取对象的活跃请求列表
                     for(size_t i=0; i<active_reqs.size(); ++i){ 
                         auto & req = requests[active_reqs[i]];
                         if(req.is_up || req.is_completed()){ // 跳过已经完成的请求
+                        // if(req.is_up || req.is_completed() || req.is_choose){ // 跳过已经完成的请求
                             ++i;
                             continue;
                         }
@@ -380,6 +384,11 @@ void read_action(int t)
                 continue;
             }
             disks[i].part_p = part_p; // 更新当前分区
+            auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
+            // if(part_p->score == second_part_p->score){ // 分数相同
+                
+            // }
+            assert(part_p->score != second_part_p->score);
             // if(part_p == disks[i].part_p){ // 还是原来分区
             //     assert(disks[i].part_p);
             //     auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
@@ -405,6 +414,23 @@ void read_action(int t)
             }
         }else{ // 上次处理完了，开始处理新区间
             disks[i].last_ok = false; // 标记本次处理未完成，且从头开始处理
+# if 0
+            // 将现在选中的所有request标记为已选中##############
+            std::unordered_set<int> curr_obj;
+            for(int idx0=0; idx0 < part_p->size; ++idx0){
+                int object_id = subStorage[idx0];
+                if(object_id == 0) continue; // 该位置没有对象，继续下一个目标
+                if(objects[object_id].get_request_num() <= 0) continue; // 该对象没有请求，继续下一个目标
+                if(disks[i].curr_obj.find(object_id) != disks[i].curr_obj.end()) continue; // 跳过已操作的对象
+                curr_obj.insert(object_id); // 标记为已操作的对象
+                auto& active_reqs = objects[object_id].get_active_requests(); // 获取对象的活跃请求列表
+                for(size_t j=0; j<active_reqs.size(); ++j){
+                    auto & req = requests[active_reqs[j]];  
+                    req.is_choose = true; // 标记为已选中
+                }   
+            }
+# endif
+
         }
 
         bool stop = false; // 磁头无token，stop指示

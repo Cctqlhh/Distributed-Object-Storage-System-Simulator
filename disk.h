@@ -163,6 +163,7 @@ public:
     const PartitionInfo* part_p;  // 当前操作的区间块指针
     
     bool last_ok;
+    std::unordered_set<int> curr_obj;
     Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
 

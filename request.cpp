@@ -11,7 +11,8 @@ Request::Request(int req_id, int obj_id, int time,int size)
     // , is_done_list(size + 1, false)
     , is_done_bitmap((size + 63) / 64, 0) // 每64位一个uint64_t
     , rest(size)
-    , is_up(false) {}
+    , is_up(false)
+    , is_choose(false) {}
 
 void Request::link_to_previous(int prev_id) {
     prev_request_id = prev_id;

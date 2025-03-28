@@ -12,6 +12,7 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     , head_free(true)
     , part_p(nullptr)
     , last_ok(true) {
+        curr_obj.clear();
     // 初始化每个存储单元的分区信息
     storage_partition_map.resize(disk_capacity + 1);        // 存储单元编号从 1 到 disk_capacity
     partitions.resize(DISK_PARTITIONS + 1);                 // 分区编号从 1 到 20

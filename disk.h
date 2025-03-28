@@ -42,113 +42,200 @@ struct PartitionInfo {
     }
 };
 
-class DynamicPartitionHeap {
+// class DynamicPartitionHeap {
+//     private:
+//         // 使用 vector 存储堆中元素（指向 PartitionInfo 对象的指针）
+//         std::vector<PartitionInfo*> heap;
+//         // 使用哈希表记录每个元素在 heap 中的索引，便于快速定位更新位置
+//         // std::unordered_map<PartitionInfo*, size_t> position_map;
+    
+//         // 交换堆中两个元素的位置，并更新 position_map 映射
+//         void swapNodes(size_t i, size_t j) {
+//             std::swap(heap[i], heap[j]);
+//             // position_map[heap[i]] = i;
+//             // position_map[heap[j]] = j;
+//             heap[i]->heap_index = i;
+//             heap[j]->heap_index = j;
+//         }
+    
+//         // 自下而上调整堆（上浮操作），用于元素 score 增加时
+//         void heapifyUp(size_t index) {
+//             while (index > 0) {
+//                 size_t parent = (index - 1) / 2;
+//                 // 这里调用 PartitionInfo 的 < 运算符，score 越高优先级越高
+//                 if (*heap[parent] < *heap[index]) {
+//                     swapNodes(index, parent);
+//                     index = parent;
+//                 } else {
+//                     break;
+//                 }
+//             }
+//         }
+    
+//         // 自上而下调整堆（下沉操作），用于元素 score 减小时
+//         void heapifyDown(size_t index) {
+//             size_t n = heap.size();
+//             while (true) {
+//                 size_t left = 2 * index + 1;
+//                 size_t right = 2 * index + 2;
+//                 size_t largest = index;
+//                 if (left < n && *heap[largest] < *heap[left]) {
+//                     largest = left;
+//                 }
+//                 if (right < n && *heap[largest] < *heap[right]) {
+//                     largest = right;
+//                 }
+//                 if (largest != index) {
+//                     swapNodes(index, largest);
+//                     index = largest;
+//                 } else {
+//                     break;
+//                 }
+//             }
+//         }
+    
+//     public:
+//         DynamicPartitionHeap() {}
+    
+//         // 插入新元素
+//         void push(PartitionInfo* item) {
+//             heap.push_back(item);
+//             // position_map[item] = heap.size() - 1;
+//             item->heap_index = heap.size() - 1;  // 设置内嵌索引
+//             heapifyUp(heap.size() - 1);
+//         }
+    
+//         // 返回堆顶元素
+//         PartitionInfo* top() {
+//             // if (heap.empty()) return nullptr;
+//             // return heap[0];
+            
+//             return heap.empty() ? nullptr : heap[0];
+//         }
+    
+//         // 弹出堆顶元素
+//         PartitionInfo* pop() {
+//             if (heap.empty()) return nullptr;
+//             PartitionInfo* topItem = heap[0];
+//             PartitionInfo* last = heap.back();
+//             heap[0] = last;
+//             // position_map[last] = 0;
+//             last->heap_index = 0;
+//             heap.pop_back();
+//             // position_map.erase(topItem);
+//             if (!heap.empty()) {
+//                 heapifyDown(0);
+//             }
+//             return topItem;
+//         }
+    
+//         // 当元素内部影响排序的 score 发生变化后，调用 update 调整其在堆中的位置
+//         void update(PartitionInfo* item) {
+//             size_t index = item->heap_index;
+//             // auto it = position_map.find(item);
+//             // if (it == position_map.end()) return;  // 元素不在堆中
+//             // size_t index = it->second;
+//             // heapifyUp(index);
+//             // heapifyDown(index);
+//             if (index > 0 && *heap[(index - 1) / 2] < *heap[index]) {
+//                 heapifyUp(index);
+//             } else {
+//                 heapifyDown(index);
+//             }
+//         }
+
+//          // 新增：批量更新后重建堆
+//         void rebuild_heap() {
+//             // 从最后一个非叶子节点开始，自上而下调整堆
+//             if (heap.size() > 1) {
+//                 for (int i = (heap.size() / 2) - 1; i >= 0; i--) {
+//                     heapifyDown(i);
+//                 }
+//             }
+//         }
+    
+//         bool empty() const {
+//             return heap.empty();
+//         }
+//     };
+class PartitionManager {
     private:
-        // 使用 vector 存储堆中元素（指向 PartitionInfo 对象的指针）
-        std::vector<PartitionInfo*> heap;
-        // 使用哈希表记录每个元素在 heap 中的索引，便于快速定位更新位置
-        // std::unordered_map<PartitionInfo*, size_t> position_map;
+        std::vector<PartitionInfo*> partitions;
+        size_t max_index;  // 当前最大分数的分区索引
+        bool max_valid;    // 最大值索引是否有效
     
-        // 交换堆中两个元素的位置，并更新 position_map 映射
-        void swapNodes(size_t i, size_t j) {
-            std::swap(heap[i], heap[j]);
-            // position_map[heap[i]] = i;
-            // position_map[heap[j]] = j;
-            heap[i]->heap_index = i;
-            heap[j]->heap_index = j;
-        }
-    
-        // 自下而上调整堆（上浮操作），用于元素 score 增加时
-        void heapifyUp(size_t index) {
-            while (index > 0) {
-                size_t parent = (index - 1) / 2;
-                // 这里调用 PartitionInfo 的 < 运算符，score 越高优先级越高
-                if (*heap[parent] < *heap[index]) {
-                    swapNodes(index, parent);
-                    index = parent;
-                } else {
-                    break;
+        // 更新最大值索引
+        void update_max_index() {
+            if (partitions.empty()) {
+                max_valid = false;
+                return;
+            }
+            
+            max_index = 0;
+            for (size_t i = 1; i < partitions.size(); i++) {
+                if (*partitions[max_index] < *partitions[i]) {
+                    max_index = i;
                 }
             }
-        }
-    
-        // 自上而下调整堆（下沉操作），用于元素 score 减小时
-        void heapifyDown(size_t index) {
-            size_t n = heap.size();
-            while (true) {
-                size_t left = 2 * index + 1;
-                size_t right = 2 * index + 2;
-                size_t largest = index;
-                if (left < n && *heap[largest] < *heap[left]) {
-                    largest = left;
-                }
-                if (right < n && *heap[largest] < *heap[right]) {
-                    largest = right;
-                }
-                if (largest != index) {
-                    swapNodes(index, largest);
-                    index = largest;
-                } else {
-                    break;
-                }
-            }
+            max_valid = true;
         }
     
     public:
-        DynamicPartitionHeap() {}
+        PartitionManager() : max_valid(false) {}
     
-        // 插入新元素
         void push(PartitionInfo* item) {
-            heap.push_back(item);
-            // position_map[item] = heap.size() - 1;
-            item->heap_index = heap.size() - 1;  // 设置内嵌索引
-            heapifyUp(heap.size() - 1);
-        }
-    
-        // 返回堆顶元素
-        PartitionInfo* top() {
-            // if (heap.empty()) return nullptr;
-            // return heap[0];
+            partitions.push_back(item);
             
-            return heap.empty() ? nullptr : heap[0];
+            // 检查新添加的元素是否为最大值
+            if (!max_valid || (max_valid && *partitions[max_index] < *item)) {
+                max_index = partitions.size() - 1;
+                max_valid = true;
+            }
         }
     
-        // 弹出堆顶元素
+        // 当分数更新后，标记最大值索引为无效
+        void invalidate_max() {
+            max_valid = false;
+        }
+    
+        // 获取最大分数的分区
+        PartitionInfo* top() {
+            if (!max_valid) {
+                update_max_index();
+            }
+            return partitions.empty() ? nullptr : partitions[max_index];
+        }
+    
+        // 弹出最大分数的分区（如果需要）
         PartitionInfo* pop() {
-            if (heap.empty()) return nullptr;
-            PartitionInfo* topItem = heap[0];
-            PartitionInfo* last = heap.back();
-            heap[0] = last;
-            // position_map[last] = 0;
-            last->heap_index = 0;
-            heap.pop_back();
-            // position_map.erase(topItem);
-            if (!heap.empty()) {
-                heapifyDown(0);
+            if (partitions.empty()) return nullptr;
+            
+            if (!max_valid) {
+                update_max_index();
             }
-            return topItem;
-        }
-    
-        // 当元素内部影响排序的 score 发生变化后，调用 update 调整其在堆中的位置
-        void update(PartitionInfo* item) {
-            size_t index = item->heap_index;
-            // auto it = position_map.find(item);
-            // if (it == position_map.end()) return;  // 元素不在堆中
-            // size_t index = it->second;
-            // heapifyUp(index);
-            // heapifyDown(index);
-            if (index > 0 && *heap[(index - 1) / 2] < *heap[index]) {
-                heapifyUp(index);
-            } else {
-                heapifyDown(index);
-            }
+            
+            PartitionInfo* result = partitions[max_index];
+            
+            // 移除最大元素
+            partitions[max_index] = partitions.back();
+            partitions.pop_back();
+            
+            // 重新计算最大值
+            max_valid = false;
+            
+            return result;
         }
     
         bool empty() const {
-            return heap.empty();
+            return partitions.empty();
         }
+        
+        // // 重建堆（为了兼容接口）
+        // void rebuild_heap() {
+        //     max_valid = false;
+        // }
     };
-    
+
 
 class Disk {
 private:
@@ -168,7 +255,10 @@ private:
     // 所有区间块的初始最大容量
     std::vector<int> initial_max_capacity;
     // 新增：动态更新的堆，用于管理 partitions 的指针（支持动态更新）
-    DynamicPartitionHeap partition_heap;
+    // DynamicPartitionHeap partition_heap;
+    PartitionManager partition_manager;
+
+    // void initialize_partitions();  // 初始化分区信息
 
     TokenManager token_manager;
 
@@ -246,6 +336,7 @@ public:
 
     void increase_residual_capacity(int partition_id, int size); // 增加区间块的剩余容量
     void reflash_partition_score();
+    void update_heap();
     void update_partition_head(int part_id, int head);
     // int update_partition_info(int partition_id, const Request & req);
     void update_partition_info(int partition_id, double score);

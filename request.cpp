@@ -62,7 +62,8 @@ double Request::get_score(int t) const{
 
     // 1. 计算时间得分（double 精度）
     // 2. 计算对象大小得分
-    double time_size_score = compute_time_score_update(t) * size_score;
+    // double time_size_score = compute_time_score_update(t) * size_score;
+    double time_size_score = time_score * size_score;
     return time_size_score;
     // double time_size_score = time_score * size_score;
     // return time_size_score;

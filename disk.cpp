@@ -154,7 +154,14 @@ void Disk::reflash_partition_score(){
         partition.score = 0.0f;
     }
     initialize_partitions();
+    // 标记最大值索引需要更新
+    partition_manager.invalidate_max();
 }
+
+// void Disk::update_heap(){
+//     // partition_heap.rebuild_heap();
+//     partition_manager.rebuild_heap();
+// }
 
 void Disk::update_partition_head(int part_id, int head){
     partitions[part_id].head_position = head;
@@ -164,8 +171,8 @@ void Disk::update_partition_info(int partition_id, double score){
     // if (partition_id <= 0 || partition_id > partitions.size() - 1 || score <= 0) return;
     partitions[partition_id].score = score;
     // 调用动态堆 update 操作，调整该分区在堆中的位置
-    partition_heap.update(&partitions[partition_id]);
-
+    // partition_heap.update(&partitions[partition_id]);
+    partition_manager.push(&partitions[partition_id]);
 
     // partitions[partition_id].score = req.get_size_score() * req.get_time_score();
     // partitions[partition_id].score = req.get_size_score() * req.compute_time_score_update(t);
@@ -212,20 +219,24 @@ void Disk::increase_residual_capacity(int partition_id, int size) {
 void Disk::initialize_partitions() {
     // 假定 partitions 的大小已固定为 DISK_PARTITIONS
     // 首先清空现有堆，再将 partitions 中每个元素的地址推入动态堆中
-    partition_heap = DynamicPartitionHeap(); // 重置堆
-    for (auto it = partitions.begin() + 1; it != partitions.end(); ++it) {
-        partition_heap.push(&(*it));
-    }
+    // partition_heap = DynamicPartitionHeap(); // 重置堆
+    partition_manager = PartitionManager();
+    // for (auto it = partitions.begin() + 1; it != partitions.end(); ++it) {
+        // partition_heap.push(&(*it));
+    // }
 }
 
 // 新增方法：获取堆顶（score 最高）的分区信息
 const PartitionInfo* Disk::get_top_partition() {
-    return partition_heap.top();
+    // return partition_heap.top();
+    return partition_manager.top();
+    // return partition_heap.get_max();
 }
 
 // 新增方法：获取堆顶（score 最高）的分区信息
 const PartitionInfo* Disk::get_pop_partition() {
-    return partition_heap.pop();
+    // return partition_heap.pop();
+    return partition_manager.pop();
 }
 
 // int Disk::get_cur_tokens() const {
@@ -233,5 +244,6 @@ const PartitionInfo* Disk::get_pop_partition() {
 // }
 
 void Disk::push_partition(PartitionInfo* partition) {
-    partition_heap.push(partition);
+    // partition_heap.push(partition);
+    partition_manager.push(partition);
 }

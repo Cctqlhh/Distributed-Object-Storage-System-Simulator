@@ -309,6 +309,7 @@ void read_action(int t)
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
             }
+            // disks[i].update_heap();
             if(!has_request) {
                 printf("#\n"); // 当前硬盘无请求，不操作
                 i++;
@@ -325,7 +326,8 @@ void read_action(int t)
             // std::cerr << "last not ok" << std::endl;
             part_p = disks[i].part_p; // 继续上次区间
         }else{ // 上次读完了
-            part_p = disks[i].get_pop_partition(); // 获取最高分区
+            // part_p = disks[i].get_pop_partition(); // 获取最高分区
+            part_p = disks[i].get_top_partition(); // 获取最高分区
             // 优化：如果最高分区分数为0，直接处理下一个磁盘
             if(part_p->score <= 0){
                 disks[i].last_ok = true;

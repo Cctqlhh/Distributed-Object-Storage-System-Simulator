@@ -31,10 +31,6 @@ public:
     bool write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos);
     // 删除一个副本，修改硬盘存储数据，区间块大小增加。
     void delete_replica(int replica_idx, Disk& disk);
-    // 在硬盘上写入该对象的三个副本
-    bool write_object(std::vector<Disk>& disk);
-    // 在硬盘上删除该对象的三个副本
-    void delete_object(std::vector<Disk>& disks);
     // 获取该对象在硬盘上的存储位置
     bool is_deleted_status() const; //判断对象是否已删除
     void mark_as_deleted(); //标记对象为已删除

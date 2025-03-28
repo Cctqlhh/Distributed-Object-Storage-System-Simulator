@@ -14,99 +14,99 @@ Object::Object(int id, int size, int tag_id)
     , is_continue(REP_NUM + 1) {}
     
 
-// 写策略1：采用散写策略
-bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
-    assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
-  
-    int current_write_point = 0;    // 当前写入大小
-    int disk_capacity = disk.get_capacity();
-    // 预分配空间，避免多次重新分配
-    std::vector<int> positions;
-    positions.reserve(size);
-    bool continuous = true;   // 默认连续写
-    
-    // 先找到所有空闲位置，减少磁盘操作次数
-    for (int i = start_pos; i <= end_pos; i++) {
-//     for (int i = 1; i <= disk_capacity && current_write_point < size; i++) {
-        if (disk.is_free(i)) {
-            if (disk.write(i, object_id)) {
-                unit_pos[replica_idx][++current_write_point] = i;
-                // 写入完毕
-                if (current_write_point == size) {
-                    replica_disks[replica_idx] = disk.get_id();
-                    // 减小区间块剩余大小 replica_idx 为1-3
-                    disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
-                    is_continue[replica_idx] = continuous;
-                    return true;
-                }
-            }
-        } else {
-            // 只要遇到非空闲位置，该副本就是散插
-            continuous = false; 
-        }
-    }
-    // 这里不可能写入失败，如果写入失败，直接报错
-    assert(current_write_point == size && "The write operation failed.");
-    return false;
-}
-
-// // 写策略2：先尝试连续写，再采用散写策略
+// // 写策略1：采用散写策略
 // bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
-//     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 检查副本索引
+//     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
+  
+//     int current_write_point = 0;    // 当前写入大小
 //     int disk_capacity = disk.get_capacity();
-
-//     // 尝试连续写：扫描[start_pos, end_pos]寻找连续空闲区间块，长度等于size
-//     int contiguous_start = -1;
-//     int current_streak = 0;
+//     // 预分配空间，避免多次重新分配
+//     std::vector<int> positions;
+//     positions.reserve(size);
+//     bool continuous = true;   // 默认连续写
+    
+//     // 先找到所有空闲位置，减少磁盘操作次数
 //     for (int i = start_pos; i <= end_pos; i++) {
+// //     for (int i = 1; i <= disk_capacity && current_write_point < size; i++) {
 //         if (disk.is_free(i)) {
-//             if (current_streak == 0) {
-//                 contiguous_start = i;  // 标记连续区间开始位置
-//             }
-//             current_streak++;
-//             if (current_streak == size) {
-//                 break; // 找到足够长度的连续区间
-//             }
-//         } else {
-//             // 如果遇到非空闲位置，重置计数
-//             current_streak = 0;
-//             contiguous_start = -1;
-//         }
-//     }
-
-//     if (current_streak == size) {
-//         // 如果找到了连续区间，则连续写入
-//         for (int i = contiguous_start; i < contiguous_start + size; i++) {
-//             if (!disk.write(i, object_id)) {
-//                 assert(false && "Contiguous write failed unexpectedly");
-//                 return false;
-//             }
-//             // 记录写入的存储位置，注意这里下标从1开始
-//             unit_pos[replica_idx][i - contiguous_start + 1] = i;
-//         }
-//         replica_disks[replica_idx] = disk.get_id();
-//         disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
-//         return true;
-//     } else {
-//         // 如果没有找到连续空闲区域，则采用原来的散写策略
-//         int current_write_point = 0;
-//         for (int i = start_pos; i <= end_pos; i++) {
-//             if (disk.is_free(i)) {
-//                 if (disk.write(i, object_id)) {
-//                     unit_pos[replica_idx][++current_write_point] = i;
-//                     if (current_write_point == size) {
-//                         replica_disks[replica_idx] = disk.get_id();
-//                         disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
-//                         return true;
-//                     }
+//             if (disk.write(i, object_id)) {
+//                 unit_pos[replica_idx][++current_write_point] = i;
+//                 // 写入完毕
+//                 if (current_write_point == size) {
+//                     replica_disks[replica_idx] = disk.get_id();
+//                     // 减小区间块剩余大小 replica_idx 为1-3
+//                     disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+//                     is_continue[replica_idx] = continuous;
+//                     return true;
 //                 }
 //             }
+//         } else {
+//             // 只要遇到非空闲位置，该副本就是散插
+//             continuous = false; 
 //         }
-//         // 理论上不应该走到这里，写入失败直接断言
-//         assert(current_write_point == size && "The write operation failed.");
-//         return false;
 //     }
+//     // 这里不可能写入失败，如果写入失败，直接报错
+//     assert(current_write_point == size && "The write operation failed.");
+//     return false;
 // }
+
+// 写策略2：先尝试连续写，再采用散写策略
+bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
+    assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 检查副本索引
+    int disk_capacity = disk.get_capacity();
+
+    // 尝试连续写：扫描[start_pos, end_pos]寻找连续空闲区间块，长度等于size
+    int contiguous_start = -1;
+    int current_streak = 0;
+    for (int i = start_pos; i <= end_pos; i++) {
+        if (disk.is_free(i)) {
+            if (current_streak == 0) {
+                contiguous_start = i;  // 标记连续区间开始位置
+            }
+            current_streak++;
+            if (current_streak == size) {
+                break; // 找到足够长度的连续区间
+            }
+        } else {
+            // 如果遇到非空闲位置，重置计数
+            current_streak = 0;
+            contiguous_start = -1;
+        }
+    }
+
+    if (current_streak == size) {
+        // 如果找到了连续区间，则连续写入
+        for (int i = contiguous_start; i < contiguous_start + size; i++) {
+            if (!disk.write(i, object_id)) {
+                assert(false && "Contiguous write failed unexpectedly");
+                return false;
+            }
+            // 记录写入的存储位置，注意这里下标从1开始
+            unit_pos[replica_idx][i - contiguous_start + 1] = i;
+        }
+        replica_disks[replica_idx] = disk.get_id();
+        disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+        return true;
+    } else {
+        // 如果没有找到连续空闲区域，则采用原来的散写策略
+        int current_write_point = 0;
+        for (int i = start_pos; i <= end_pos; i++) {
+            if (disk.is_free(i)) {
+                if (disk.write(i, object_id)) {
+                    unit_pos[replica_idx][++current_write_point] = i;
+                    if (current_write_point == size) {
+                        replica_disks[replica_idx] = disk.get_id();
+                        disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+                        return true;
+                    }
+                }
+            }
+        }
+        // 理论上不应该走到这里，写入失败直接断言
+        assert(current_write_point == size && "The write operation failed.");
+        return false;
+    }
+}
 
 void Object::delete_replica(int replica_idx, Disk& disk) {
     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 添加副本索引检查 1-3
@@ -130,54 +130,6 @@ void Object::delete_replica(int replica_idx, Disk& disk) {
     disk.increase_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
     // 这里不可能删除失败，如果删除失败，直接报错
     assert(current_delete_point == size && "The delete operation failed.");
-}
-
-bool Object::write_object(std::vector<Disk>& disks) {
-    int current_write_point;    // 当前写入大小
-    // 把对象三个副本写入到三个区间块中
-    for (int j = 1; j <= REP_NUM; j++) {
-        current_write_point = 0;    // 当前写入大小
-        int disk_id = chosen_partitions[j - 1].first;       // 硬盘ID
-        int partition_id = chosen_partitions[j - 1].second; // 区间块ID
-        const PartitionInfo& partition_info = disks[disk_id].get_partition_info(partition_id); // 区间块信息
-        int start_pos = partition_info.start; // 区间块起始位置
-        int end_pos = start_pos + partition_info.size - 1; // 区间块结束位置
-        for (int i = start_pos; i <= end_pos; i++) {
-            if (disks[disk_id].is_free(i)) {
-                if (disks[disk_id].write(i, object_id)) {
-                    unit_pos[j][++current_write_point] = i;
-                    // 写入完毕
-                    if (current_write_point == size) {
-                        replica_disks[j] = disk_id;
-                        // 减小区间块剩余大小
-                        disks[disk_id].reduce_residual_capacity(chosen_partitions[j - 1].second, size);
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    // 这里不可能写入失败，如果写入失败，直接报错
-    assert(current_write_point == size && "The write operation failed.");
-    return false;
-}
-
-void Object::delete_object(std::vector<Disk>& disks) {
-    for (int j = 1; j <= REP_NUM; j++) {       
-        int disk_id = replica_disks[j];    // 硬盘ID
-        // 自身存储数据不需要清零，只需要维护其他相关数据即可
-        // 删除硬盘存储
-        int current_write_point = 0;    // 当前删除大小
-        for (int i = 1; i <= size; i++) {
-            disks[disk_id].erase(unit_pos[j][i]);
-            current_write_point++;
-        }
-        // 增加区间块剩余大小
-        disks[disk_id].increase_residual_capacity(chosen_partitions[j - 1].second, size);
-        // 这里不可能删除失败，如果删除失败，直接报错
-        assert(current_write_point == size && "The delete operation failed.");
-    }
-    request_num = 0;
 }
 
 int Object::get_storage_position(int replica_idx, int block_idx) const {
@@ -232,7 +184,8 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
       const std::vector<std::vector<int>>& conflict_matrix) {
 
     chosen_partitions.clear();
-    std::unordered_set<int> used_disks;         // 已选过的硬盘，保证三个副本在不同硬盘上 
+    // std::unordered_set<int> used_disks;         // 已选过的硬盘，保证三个副本在不同硬盘上 
+    std::set<int> used_disks;         // 已选过的硬盘，保证三个副本在不同硬盘上 
 
     // ========== Lambda：判断某个区间块是否满足写入条件 ==========
     auto can_use = [&](int disk_id, int part_id) {
@@ -241,11 +194,13 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
         // 不允许空间不足    
         if (disks[disk_id].get_residual_capacity(part_id) < size) return false; 
         // 不允许该标签在该硬盘上的区间块数超出上限
-        int tag_count = 0;
-        for (int p = 1; p <= DISK_PARTITIONS; ++p) {
-            if (tagmanager.disk_partition_usage_tagkind[disk_id][p].count(tag_id)) tag_count++;    // 该标签在该硬盘上的区间块数
-        }
-        if (tag_count > MAX_PARTITIONS_PER_TAG) return false;
+        // int tag_count = 0;
+        // for (int p = 1; p <= DISK_PARTITIONS; ++p) {
+        //     if (tagmanager.disk_partition_usage_tagkind[disk_id][p].count(tag_id)) tag_count++;    // 该标签在该硬盘上的区间块数
+        // }
+        // // if (tag_count > MAX_PARTITIONS_PER_TAG) return false;
+        // assert(tag_count == tagmanager.disk_tag_partition_num[disk_id][tag_id] && "tag_count != tagmanager.disk_tag_partition_num[disk_id][tag_id]");
+        if (tagmanager.disk_tag_partition_num[disk_id][tag_id] > MAX_PARTITIONS_PER_TAG) return false;
         // 上述条件都满足，则该标签能够写入该硬盘上的该区间块
         return true;
     };
@@ -263,7 +218,7 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
             if ((int)chosen_partitions.size() == REP_NUM) return;  // 已经选够了，直接退出
             
             bool found = false;                                         // 是否找到合适的区间块
-            std::pair<int, int> best_partition = {-1, -1};              // 最优区间块
+            std::pair<int, int> best_partition = {-1, -1};              // 最优区间块 {disk_id, part_id}
             int best_inner_conflict = -1;                               // 该对象标签与该区间块中标签的冲突值,越大越好
             int best_disk_conflict = std::numeric_limits<int>::max();   // 该对象标签与该硬盘中标签的冲突值,越小越好
             int best_disk_tag_partition_count = std::numeric_limits<int>::max(); // 该硬盘已分配标签的区间块数量,越小越好
@@ -275,7 +230,7 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
             int max_count = std::numeric_limits<int>::min();            //最大硬盘上所有标签分区数量的和
             int max_residual = std::numeric_limits<int>::min();         //最大剩余容量
 
-            // 遍历该集合下所有满足条件的区间块，求变量最大值
+            // 遍历该集合下所有满足条件的区间块，求变量最大值，用于变量归一化
             for (const auto& candidate  : from_set) {
                 int disk_id = candidate.first;
                 int part_id = candidate.second;
@@ -304,7 +259,7 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                 }
                 if (disk_conflict > max_disk_conflict) max_disk_conflict = disk_conflict;
 
-                // 计算该硬盘上所有标签分区数量的和（越小代表该磁盘负载越低），可能会超20，但不影响选择
+                // 计算该硬盘上所有标签区间块数量的和（越小代表该磁盘负载越低），可能会超20，但不影响选择
                 int disk_tag_partition_count = 0;
                 for (const auto& entry : tag_manager.disk_tag_partition_num[disk_id]) {
                     disk_tag_partition_count += entry.second;
@@ -352,35 +307,16 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                 // 获取该区间块剩余容量
                 int residual = disks[disk_id].get_residual_capacity(part_id);
 
-                // // 为标签选择新区间块的策略1：
-                // // 1. inner_conflict 越大越好
-                // // 2. 若相同，则 disk_conflict 越小越好
-                // // 3. 若仍相同，则 disk_tag_partition_count 越小越好
-                // // 4. 最后选 residual 越大越好
-                // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // 为标签选择新区间块的策略2：
-                // 1. disk_tag_partition_count 越小越好
-                // 2. 若相同，则 inner_conflict 越大越好
-                // 3. 若相同，则 disk_conflict 越小越好
-                // 4. 若相同，则 residual 越大越好
+                // 为标签选择新区间块的策略1：
+                // 1. inner_conflict 越大越好
+                // 2. 若相同，则 disk_conflict 越小越好
+                // 3. 若仍相同，则 disk_tag_partition_count 越小越好
+                // 4. 最后选 residual 越大越好
                 if (!found ||
-                    (disk_tag_partition_count < best_disk_tag_partition_count) ||       
-                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
-                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                    (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual)
+                    (inner_conflict > best_inner_conflict) ||
+                    (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                    (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
                 ) {
                     best_partition = candidate;
                     best_inner_conflict = inner_conflict;
@@ -389,6 +325,25 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                     best_residual = residual;
                     found = true;
                 }
+
+                // // 为标签选择新区间块的策略2：
+                // // 1. disk_tag_partition_count 越小越好
+                // // 2. 若相同，则 inner_conflict 越大越好
+                // // 3. 若相同，则 disk_conflict 越小越好
+                // // 4. 若相同，则 residual 越大越好
+                // if (!found ||
+                //     (disk_tag_partition_count < best_disk_tag_partition_count) ||       
+                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual)
+                // ) {
+                //     best_partition = candidate;
+                //     best_inner_conflict = inner_conflict;
+                //     best_disk_conflict = disk_conflict;
+                //     best_disk_tag_partition_count = disk_tag_partition_count;
+                //     best_residual = residual;
+                //     found = true;
+                // }
 
                 // // 为标签选择新区间块的策略3：
                 // // double score = -w1 * norm_count - w2 * norm_disk_conflict + w3 * norm_inner_conflict + w4 * norm_residual;
@@ -430,7 +385,7 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
     // ========== Step 1：优先使用已有分配给该标签的区间块 ==========
     for (const auto& [disk_id, parts] : tag_manager.tag_disk_partition[tag_id]) {
         for (int part_id : parts) {
-            // 该硬盘未被选过，该区间块被选过，该区间块容量满足要求
+            // 该硬盘未被选过，该硬盘该区间块有该标签，该区间块容量满足要求
             if (!used_disks.count(disk_id) &&                                                   
                 tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id) &&    
                 disks[disk_id].get_residual_capacity(part_id) >= size) {

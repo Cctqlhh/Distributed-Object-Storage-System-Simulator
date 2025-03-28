@@ -139,20 +139,17 @@ void preprocess() {
         disks[i] = Disk(i, V, G);
     }
 
-    // 调用全局 tagmanager 进行标签分配
-    // tagmanager.calculate_tag_disk_requirement(sum, conflict_matrix, disks);
-    // tagmanager.allocate_tag_disk_requirement(disks);
     tagmanager.init(sum, conflict_matrix, disks);
 
-    // // 打印---------------------------------------------------------------------
-    // // 遍历每个磁盘
-    // for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
-    //     int total_tags = 0;
-    //     for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
-    //         total_tags += tag_pair.second;
-    //     }
-    //     std::cerr << "disk " << disk_id << "  total_tags: " << total_tags << std::endl;
-    // }
+    // 打印---------------------------------------------------------------------
+    // 遍历每个磁盘
+    for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
+        int total_tags = 0;
+        for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
+            total_tags += tag_pair.second;
+        }
+        std::cerr << "disk " << disk_id << "  total_tags: " << total_tags << std::endl;
+    }
 
     // // 遍历每个磁盘
     // for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
@@ -242,9 +239,6 @@ void write_action(int t)
         //     std::cerr << "Object " << id << " replica " << j + 1 << " disk " << chosen_partitions[j].first << " partition " << chosen_partitions[j].second << std::endl;
         // }
 
-        // // 写入对象
-        // objects[id].write_object(disks);
-
         // 把对象三个副本写入到三个区间块中
         for (int j = 1; j <= REP_NUM; j++) {
             int disk_id = chosen_partitions[j - 1].first;       // 硬盘ID
@@ -331,7 +325,12 @@ void read_action(int t)
                 int start = disks[i].get_partition_start(partition_id);
                 int size = disks[i].get_partition_size(partition_id);
                 const int* subStorage = storage_.data() + start; // 获取分区的存储单元
-            
+                
+                int t0 = t;
+                // int dis = disks[i].get_distance_to_head(start); // 计算距离
+                // if (disks[i].get_cur_tokens() == G && dis > G - 64) t0 += 1;
+                // else if (disks[i].get_cur_tokens() < G && dis > disks[i].get_cur_tokens() - 64) t0 += 2;
+
                 float score = 0;
                 // 遍历分区的所有存储单元  // 后续替换为直接遍历分区的所有对象
                 for(int idx=0; idx < size; ++idx){
@@ -349,7 +348,7 @@ void read_action(int t)
                             ++i;
                             continue;
                         }
-                        score += req.get_score(t);
+                        score += req.get_score(t0);
                     }
                 }
                 if(!has_request && score > 0) has_request = true;
@@ -499,6 +498,8 @@ void read_action(int t)
 int main()
 {   
     preprocess();
+    tagmanager.printDiskPartitionUsageTagkind();
+    tagmanager.printDiskTagPartitionNum();
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
         // token_manager->refresh();
         for (int i=1; i<=N; i++) {
@@ -508,6 +509,8 @@ int main()
         delete_action(t);
         write_action(t);
         read_action(t);
+        tagmanager.check_tag_partition_sets();
+        tagmanager.check_consistency();
     }
     // delete token_manager;
 

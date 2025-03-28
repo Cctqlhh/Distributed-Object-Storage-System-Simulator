@@ -63,6 +63,7 @@ double Request::get_score(int t) const{
     // 1. 计算时间得分（double 精度）
     // 2. 计算对象大小得分
     double time_size_score = compute_time_score_update(t) * size_score;
+    // return time_size_score;
     // 3. 计算不被删除的概率，添加极小值保护（避免 log(0) 或 0 乘积）
     double not_del = std::max(1e-9, 1.0 - get_delete_prob(t));
 

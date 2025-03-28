@@ -12,6 +12,9 @@ struct PartitionInfo {
     // std::vector<int> need_read;  // 该区间块的每个存储单元是否需要读，需要读取的次数
     // std::vector<int> object_ids;    // 该区间块存储的所有对象id
     
+    // 每个区间块的对象id
+    std::vector<int> partition_object;
+
     PartitionInfo() : start(0), size(0), score(0) {}  // 默认构造函数
     // PartitionInfo(int s, int sz) : start(s), size(sz), score(0), need_read(sz, 0) {}  // 带参数的构造函数
     PartitionInfo(int s, int sz) : start(s), size(sz), score(0) {}  // 带参数的构造函数
@@ -218,7 +221,7 @@ public:
         return partition_size;
     }
     // 获取某个区间块的信息,partition_id 分区编号（1~DISK_PARTITIONS）,return 该分区的 PartitionInfo 结构体
-    const PartitionInfo& get_partition_info(int partition_id) const{
+    PartitionInfo& get_partition_info(int partition_id) {
         assert(partition_id >= 1 && partition_id <= DISK_PARTITIONS);
         return partitions[partition_id];
     }
@@ -261,4 +264,5 @@ public:
     int get_partition_size(int partition_id) const{
         return partitions[partition_id].size;
     }
+
 };

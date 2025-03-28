@@ -58,7 +58,7 @@ double Request::get_delete_prob(int t) const{
 double Request::get_score(int t) const{
     // double score = compute_time_score_update(t);
     // return score * size_score * (1 - get_delete_prob(t));
-    // return score * size_score;
+    return time_score * size_score;
 
     // 1. 计算时间得分（double 精度）
     // 2. 计算对象大小得分

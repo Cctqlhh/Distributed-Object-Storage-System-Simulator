@@ -55,6 +55,8 @@ bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_p
     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 检查副本索引
     int disk_capacity = disk.get_capacity();
 
+    bool continuous; // 是否连续写
+
     // 尝试连续写：扫描[start_pos, end_pos]寻找连续空闲区间块，长度等于size
     int contiguous_start = -1;
     int current_streak = 0;
@@ -76,6 +78,7 @@ bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_p
 
     if (current_streak == size) {
         // 如果找到了连续区间，则连续写入
+        continuous = true;
         for (int i = contiguous_start; i < contiguous_start + size; i++) {
             if (!disk.write(i, object_id)) {
                 assert(false && "Contiguous write failed unexpectedly");
@@ -86,9 +89,11 @@ bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_p
         }
         replica_disks[replica_idx] = disk.get_id();
         disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+        is_continue[replica_idx] = continuous; 
         return true;
     } else {
         // 如果没有找到连续空闲区域，则采用原来的散写策略
+        continuous = false;
         int current_write_point = 0;
         for (int i = start_pos; i <= end_pos; i++) {
             if (disk.is_free(i)) {
@@ -97,6 +102,7 @@ bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_p
                     if (current_write_point == size) {
                         replica_disks[replica_idx] = disk.get_id();
                         disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+                        is_continue[replica_idx] = continuous; 
                         return true;
                     }
                 }

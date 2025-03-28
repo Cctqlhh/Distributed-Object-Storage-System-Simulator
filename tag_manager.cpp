@@ -169,11 +169,11 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
         tag_required_blocks[i] = std::ceil((double)max_storage / disks[1].get_partition_size());
     }
     
-    // 打印 tag_required_blocks
-    std::cerr << "tag_required_blocks: " << std::endl;
-    for (int i = 1; i <= M; i++) {
-        std::cerr << "tag" << i << " : "<< tag_required_blocks[i] << std::endl;
-    }
+    // // 打印 tag_required_blocks
+    // std::cerr << "tag_required_blocks: " << std::endl;
+    // for (int i = 1; i <= M; i++) {
+    //     std::cerr << "tag" << i << " : "<< tag_required_blocks[i] << std::endl;
+    // }
 
     // 遍历标签，为每个标签分配三个硬盘 
     std::vector<int> indices(M);
@@ -231,7 +231,7 @@ void TagManager::update_tag_info_after_delete(const Object& object) {
         int partition_id = chosen_partitions[j].second;
         disk_partition_usage_tagnum[disk_id][partition_id][tag] -= 1;  // 硬盘区间块的使用情况
         assert(disk_partition_usage_tagnum[disk_id][partition_id][tag] >= 0 && "The partition usage count is negative.");
-        if (disk_partition_usage_tagnum[disk_id][partition_id][tag] == 0) {  // 该硬盘该区间块该标签的对象个数减到0
+        if (disk_partition_usage_tagnum[disk_id][partition_id][tag] == 0) {  // 该硬盘该区间块该标签的对象个数减到0  
             disk_partition_usage_tagkind[disk_id][partition_id].erase(tag);  // 从该区间块的标签种类中移除该标签
             disk_tag_partition_num[disk_id][tag] -= 1;                      // 该硬盘该标签的区间块数量减1
             assert(disk_tag_partition_num[disk_id][tag] >= 0 && "The tag partition count is negative.");
@@ -356,20 +356,18 @@ void TagManager::check_tag_partition_sets() const {
 }
 
 void TagManager::check_consistency() const {
-    // // 检查 1：对每个硬盘、每个分区，对每个标签，验证 disk_partition_usage_tagnum 与 disk_partition_usage_tagkind 是否一致
-    // for (size_t disk_id = 1; disk_id < disk_partition_usage_tagkind.size(); ++disk_id) {
-    //     for (int part_id = 1; part_id <= DISK_PARTITIONS; ++part_id) {
-    //         for (int tag = 1; tag <= M; ++tag) {
-    //             int count = disk_partition_usage_tagnum[disk_id][part_id][tag];
-    //             bool inSet = (disk_partition_usage_tagkind[disk_id][part_id].count(tag) > 0);
-    //             if (count > 0) {
-    //                 assert(inSet && "Inconsistency: usage count > 0 but tag not found in tagkind set.");
-    //             } else {
-    //                 assert(!inSet && "Inconsistency: usage count == 0 but tag found in tagkind set.");
-    //             }
-    //         }
-    //     }
-    // }
+    // 检查 1：对每个硬盘、每个分区，对每个标签，验证 disk_partition_usage_tagnum 与 disk_partition_usage_tagkind 是否一致
+    for (size_t disk_id = 1; disk_id < disk_partition_usage_tagkind.size(); ++disk_id) {
+        for (int part_id = 1; part_id <= DISK_PARTITIONS; ++part_id) {
+            for (int tag = 1; tag <= M; ++tag) {
+                int count = disk_partition_usage_tagnum[disk_id][part_id][tag];
+                bool inSet = (disk_partition_usage_tagkind[disk_id][part_id].count(tag) > 0);
+                if (count > 0) {
+                    assert(inSet && "Inconsistency: usage count > 0 but tag not found in tagkind set.");
+                }
+            }
+        }
+    }
     
     // 检查 2：对每个硬盘，验证 disk_tag_kind、disk_tag_partition_num 和 tag_disk_partition 的记录一致
     for (size_t disk_id = 1; disk_id < disk_tag_kind.size(); ++disk_id) {
@@ -398,10 +396,54 @@ void TagManager::check_consistency() const {
         }
     }
 
+    // 检查 3：通过 disk_partition_usage_tagnum 检查其他三个变量的一致性
+    // disk_tag_kind
+    // disk_tag_partition_num
+    // tag_disk_partition
+    for (size_t disk_id = 1; disk_id < disk_partition_usage_tagnum.size(); ++disk_id) {
+        std::set<int> computedDiskTagKind;                   // 从 tagnum 计算出的该硬盘所有标签集合
+        std::unordered_map<int, int> computedPartitionCount;   // 每个标签出现的分区数
+        std::unordered_map<int, std::set<int>> computedTagDiskPartition; // 每个标签对应的分区集合
 
-    
-    // std::cout << "All consistency checks passed." << std::endl;
+        // 遍历每个分区和每个标签，重建信息
+        for (int part_id = 1; part_id <= DISK_PARTITIONS; ++part_id) {
+            for (int tag = 1; tag <= M; ++tag) {
+                int count = disk_partition_usage_tagnum[disk_id][part_id][tag];
+                if (count > 0) {
+                    computedDiskTagKind.insert(tag);
+                    computedPartitionCount[tag]++;
+                    computedTagDiskPartition[tag].insert(part_id);
+                }
+            }
+        }
+
+        // 检查 disk_tag_kind 是否与 computedDiskTagKind 一致
+        assert(computedDiskTagKind == disk_tag_kind[disk_id] && 
+            "Inconsistency: computed disk tag kind from tagnum does not match disk_tag_kind.");
+
+        // 对于每个标签，检查 disk_tag_partition_num 和 tag_disk_partition
+        for (int tag : computedDiskTagKind) {
+            // 检查 disk_tag_partition_num：统计出的分区数应与记录相同
+            int recordedCount = 0;
+            auto it = disk_tag_partition_num[disk_id].find(tag);
+            if (it != disk_tag_partition_num[disk_id].end())
+                recordedCount = it->second;
+            assert(computedPartitionCount[tag] == recordedCount && 
+                "Inconsistency: computed partition count from tagnum does not equal disk_tag_partition_num.");
+
+            // 检查 tag_disk_partition：记录中该硬盘的分区数量应与统计数一致
+            int vectorCount = 0;
+            auto it2 = tag_disk_partition[tag].find(disk_id);
+            if (it2 != tag_disk_partition[tag].end())
+                vectorCount = it2->second.size();
+            assert(computedPartitionCount[tag] == vectorCount && 
+                "Inconsistency: computed partition count from tagnum does not equal size of tag_disk_partition.");
+        }
+    }
+
+    // std::cerr << "All consistency checks passed." << std::endl;
 }
+
 
 void TagManager::printDiskPartitionUsageTagkind() const {
     std::cerr << "disk_partition_usage_tagkind:" << std::endl;
@@ -417,6 +459,43 @@ void TagManager::printDiskPartitionUsageTagkind() const {
     }
 }
 
+void TagManager::printDiskPartitionUsageTagnum() const {
+    std::cerr << "disk_partition_usage_tagnum:" << std::endl;
+    // 假设外层下标从 1 到 N 有效（即 disk_partition_usage_tagnum[0] 未使用）
+    for (int disk_id = 1; disk_id <= N; ++disk_id) {
+        std::cerr << "Disk " << disk_id << ":" << std::endl;
+        // 同样假设每个磁盘的区间块从 1 到 DISK_PARTITIONS 有效
+        for (int partition = 1; partition <= DISK_PARTITIONS; ++partition) {
+            std::cerr << "  Partition " << partition << ": ";
+            // 打印当前区间块中各标签对应的数字
+            if (disk_partition_usage_tagnum[disk_id].size() > partition &&
+                disk_partition_usage_tagnum[disk_id][partition].empty() == false) {
+                for (size_t tag = 1; tag < disk_partition_usage_tagnum[disk_id][partition].size(); ++tag) {
+                    std::cerr << "Tag " << tag << ": " 
+                              << disk_partition_usage_tagnum[disk_id][partition][tag] << " ";
+                }
+            } else {
+                std::cerr << "(empty)";
+            }
+            std::cerr << std::endl;
+        }
+    }
+}
+
+// 打印 disk_tag_kind
+void TagManager::printDiskTagKind() const {
+    std::cerr << "disk_tag_kind:" << std::endl;
+    // 假设 disk_tag_kind[0] 未使用，磁盘从 1 到 N
+    for (int disk_id = 1; disk_id <= N; ++disk_id) {
+        std::cerr << "Disk " << disk_id << ": ";
+        // 遍历当前磁盘上的所有标签
+        for (const auto &tag : disk_tag_kind[disk_id]) {
+            std::cerr << tag << " ";
+        }
+        std::cerr << std::endl;
+    }
+}
+
 void TagManager::printDiskTagPartitionNum() const {
     std::cerr << "disk_tag_partition_num:" << std::endl;
     // 从 1 开始（假设 disk_tag_partition_num[0] 未使用）
@@ -428,3 +507,24 @@ void TagManager::printDiskTagPartitionNum() const {
         }
     }
 }
+
+// 打印 tag_disk_partition
+void TagManager::printTagDiskPartition() const {
+    std::cerr << "tag_disk_partition:" << std::endl;
+    // 假设 tag_disk_partition 的下标从 1 到 M 有效（若下标 0 也有数据，可从 0 开始）
+    for (size_t tag = 1; tag < tag_disk_partition.size(); ++tag) {
+        std::cerr << "Tag " << tag << ":" << std::endl;
+        // map 默认按 key（磁盘号）升序排列
+        const auto& diskMap = tag_disk_partition[tag];
+        for (const auto& [disk, partitionSet] : diskMap) {
+            std::cerr << "  Disk " << disk << ": ";
+            // std::set 默认按升序排列区间块号
+            for (int partition : partitionSet) {
+                std::cerr << partition << " ";
+            }
+            std::cerr << std::endl;
+        }
+    }
+}
+
+

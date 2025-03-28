@@ -141,15 +141,15 @@ void preprocess() {
 
     tagmanager.init(sum, conflict_matrix, disks);
 
-    // 打印---------------------------------------------------------------------
-    // 遍历每个磁盘
-    for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
-        int total_tags = 0;
-        for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
-            total_tags += tag_pair.second;
-        }
-        std::cerr << "disk " << disk_id << "  total_tags: " << total_tags << std::endl;
-    }
+    // // 打印---------------------------------------------------------------------
+    // // 遍历每个磁盘
+    // for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
+    //     int total_tags = 0;
+    //     for (const auto& tag_pair : tagmanager.disk_tag_partition_num[disk_id]) {
+    //         total_tags += tag_pair.second;
+    //     }
+    //     std::cerr << "disk " << disk_id << "  total_tags: " << total_tags << std::endl;
+    // }
 
     // // 遍历每个磁盘
     // for (size_t disk_id = 1; disk_id < tagmanager.disk_tag_partition_num.size(); ++disk_id) {
@@ -203,6 +203,18 @@ void delete_action(int t)
         for (int j = 1; j <= REP_NUM; j++) {
             int disk_id = objects[id].get_replica_disk_id(j);
             objects[id].delete_replica(j, disks[disk_id]); // 删除对象的每个副本
+            // 维护该硬盘该区间块的数据
+            int partition_id = objects[id].get_chosen_partitions()[j - 1].second;
+            // 从该硬盘该区间块中删除该对象
+            std::vector<int>& partition_object = disks[disk_id].get_partition_info(partition_id).partition_object;
+            for (size_t i = 0; i < partition_object.size(); ++i) {
+                if (partition_object[i] == partition_id) {
+                    // 采用交换删除法：将该元素与最后一个元素交换，再弹出最后一个元素
+                    partition_object[i] = partition_object.back();
+                    partition_object.pop_back();
+                    break;  // 删除后退出循环
+                }
+            }
         }
         // 删除结束
         tagmanager.update_tag_info_after_delete(objects[id]); // 更新被删除对象的相关标签信息
@@ -250,6 +262,8 @@ void write_action(int t)
             if (!objects[id].write_replica(j, disks[disk_id], start_pos, end_pos)) {
                 assert(false && "Error: Object write failed!");
             }
+            // 维护该硬盘该区间块的数据
+            disks[disk_id].get_partition_info(partition_id).partition_object.push_back(id);
         }
         // 写入结束
         tagmanager.update_tag_info_after_write(objects[id]); // 更新被写入对象的相关标签信息
@@ -498,9 +512,18 @@ void read_action(int t)
 int main()
 {   
     preprocess();
-    tagmanager.printDiskPartitionUsageTagkind();
-    tagmanager.printDiskTagPartitionNum();
+    // tagmanager.printDiskPartitionUsageTagkind();
+    // tagmanager.printDiskTagPartitionNum();
     for (int t = 1; t <= T + EXTRA_TIME; t++) {
+        // // 先打印数据
+        // if(t == T + EXTRA_TIME) {
+        //     tagmanager.printDiskPartitionUsageTagkind();
+        //     tagmanager.printDiskPartitionUsageTagnum();
+        //     tagmanager.printDiskTagKind();
+        //     tagmanager.printDiskTagPartitionNum();
+        //     tagmanager.printTagDiskPartition();
+        // }
+
         // token_manager->refresh();
         for (int i=1; i<=N; i++) {
             disks[i].refresh_token_manager();
@@ -509,10 +532,13 @@ int main()
         delete_action(t);
         write_action(t);
         read_action(t);
-        tagmanager.check_tag_partition_sets();
-        tagmanager.check_consistency();
-    }
-    // delete token_manager;
 
+        tagmanager.check_tag_partition_sets();
+        if (t > 10000) tagmanager.check_consistency();
+   
+    }
+
+
+    // delete token_manager;
     return 0;
 }

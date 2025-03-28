@@ -105,6 +105,15 @@ public:
     // 打印 disk_partition_usage_tagkind
     void printDiskPartitionUsageTagkind() const;
 
+    // 打印 disk_partition_usage_tagnum
+    void printDiskPartitionUsageTagnum() const;
+
+    // 打印 disk_tag_kind
+    void printDiskTagKind() const;
+
     // 打印 disk_tag_partition_num
     void printDiskTagPartitionNum() const;
+
+    // 打印 tag_disk_partition
+    void printTagDiskPartition() const;
 };

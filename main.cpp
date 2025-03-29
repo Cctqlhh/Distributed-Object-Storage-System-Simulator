@@ -85,19 +85,19 @@ void preprocess() {
         }
     }
 
-    // 计算冲突矩阵1：根据读取矩阵
-    for (int a = 1; a <= M; a++) {
-        for (int b = 1; b <= M; b++) {
-            if (a == b) continue; // 不计算自身冲突
-            int conflict_count = 0;
-            for (int j = 1; j <= slicing_count; j++) {
-                if (read_matrix[a][j] == 1 && read_matrix[b][j] == 1) {
-                    conflict_count++;
-                }
-            }
-            conflict_matrix[a][b] = conflict_count;
-        }
-    }
+    // // 计算冲突矩阵1：根据读取矩阵
+    // for (int a = 1; a <= M; a++) {
+    //     for (int b = 1; b <= M; b++) {
+    //         if (a == b) continue; // 不计算自身冲突
+    //         int conflict_count = 0;
+    //         for (int j = 1; j <= slicing_count; j++) {
+    //             if (read_matrix[a][j] == 1 && read_matrix[b][j] == 1) {
+    //                 conflict_count++;
+    //             }
+    //         }
+    //         conflict_matrix[a][b] = conflict_count;
+    //     }
+    // }
 
     // // 计算冲突矩阵2：根据 fre_read
     // for (int a = 1; a <= M; a++) {
@@ -111,17 +111,17 @@ void preprocess() {
     //     }
     // }
 
-    // // 计算冲突矩阵3：根据 fre_read,且每 HEAT_THRESHOLD 进行量化
-    // for (int a = 1; a <= M; a++) {
-    //     for (int b = 1; b <= M; b++) {
-    //         if (a == b) continue; // 不计算自身冲突
-    //         int conflict_count = 0;
-    //         for (int j = 1; j <= slicing_count; j++) {
-    //             conflict_count += fre_read[a][j] + fre_read[b][j];
-    //         }
-    //         conflict_matrix[a][b] = static_cast<int>(std::ceil(static_cast<double>(conflict_count) / HEAT_THRESHOLD));
-    //     }
-    // }
+    // 计算冲突矩阵3：根据 fre_read,且每 HEAT_THRESHOLD 进行量化
+    for (int a = 1; a <= M; a++) {
+        for (int b = 1; b <= M; b++) {
+            if (a == b) continue; // 不计算自身冲突
+            int conflict_count = 0;
+            for (int j = 1; j <= slicing_count; j++) {
+                conflict_count += fre_read[a][j] + fre_read[b][j];
+            }
+            conflict_matrix[a][b] = static_cast<int>(std::ceil(static_cast<double>(conflict_count) / HEAT_THRESHOLD));
+        }
+    }
 
     // 计算每个标签的冲突数
     for (int i = 1; i <= M; i++) {
@@ -328,13 +328,15 @@ void read_action(int t)
         assert(i <= N && i >= 1);
         // 维护已有请求 应当磁头空闲时候进行维护
         if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
+            // std::cerr<<"----------------------------------------------"<<std::endl;
+            // std::cerr<<"disk "<<i<<" head is free"<<std::endl;
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
             bool has_request = false;
             // // 遍历硬盘所有分区对应的所有对象 请求
             // // 遍历硬盘有请求的分区
             // // 每个分区的有请求的对象
             const std::vector<int>& storage_ = disks[i].get_storage(); // 获取硬盘存储单元
-            for(int partition_id = 1; partition_id <= PARTITION_ALLOCATION_THRESHOLD; ++partition_id){
+            for(int partition_id = 1; partition_id <= DISK_PARTITIONS; ++partition_id){
                 // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
                 int start = disks[i].get_partition_start(partition_id);
                 int size = disks[i].get_partition_size(partition_id);
@@ -365,10 +367,12 @@ void read_action(int t)
                         score += req.get_score(t0);
                     }
                 }
+                // std::cerr << "disk " << i << " partition " << partition_id << " score " << score << std::endl;
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
             }
             if(!has_request) {
+                // std::cerr << "disk " << i << " head not has request" << std::endl;
                 printf("#\n"); // 当前硬盘无请求，不操作
                 i++;
                 continue; // 下一个硬盘
@@ -387,6 +391,7 @@ void read_action(int t)
             part_p = disks[i].get_pop_partition(); // 获取最高分区
             // 优化：如果最高分区分数为0，直接处理下一个磁盘
             if(part_p->score <= 0){
+                // std::cerr<<"-------------------------------------------"<<std::endl;
                 disks[i].last_ok = true;
                 disks[i].set_head_free();
                 i++;
@@ -534,7 +539,7 @@ int main()
         read_action(t);
 
         tagmanager.check_tag_partition_sets();
-        if (t > 10000) tagmanager.check_consistency();
+        // if (t > 80000) tagmanager.check_consistency();
    
     }
 

@@ -93,6 +93,36 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
         int best_conflict_sum = std::numeric_limits<int>::max();                    // 记录最佳硬盘冲突值
         int best_write_conflict_sum = std::numeric_limits<int>::max();              // 记录最佳硬盘写冲突值
         int best_used_count = std::numeric_limits<int>::max();                      // 记录最佳硬盘使用的区间块数量
+        double best_score = std::numeric_limits<double>::lowest();                  // 记录最佳硬盘得分
+        // 计算最大值
+        double max_used_count;
+        double max_conflict_sum;
+        double max_write_conflict_sum;
+        for (int disk_id = 1; disk_id <= N; disk_id++) {
+            if (selected_disks.count(disk_id)) continue;
+            if (disk_tag_partition_num[disk_id][tag] > MAX_PARTITIONS_PER_TAG) continue;        // 不允许该标签在该硬盘上的区间块数超出上限
+            if (mode == 0) {
+                if (disk_remaining_partitions[disk_id] < tag_required_blocks[tag]) continue;    // 剩余区间块不足
+            }
+            // 计算硬盘冲突值
+            int conflict_sum = 0;
+            for (const auto& exist_tag : disk_tag_kind[disk_id])
+                conflict_sum += conflict_matrix[tag][exist_tag];
+            if (conflict_sum>max_conflict_sum) max_conflict_sum = conflict_sum;
+            // 计算硬盘已使用区间块数量
+            int used_count = 0;
+            for (const auto &entry : disk_tag_partition_num[disk_id])
+                used_count += entry.second;
+            if (used_count>max_used_count) max_used_count = used_count;
+            // 计算硬盘写冲突值
+            int write_conflict_sum = 0;
+            for (const auto& exist_tag : disk_tag_kind[disk_id])
+                write_conflict_sum += write_conflict_matrix[tag][exist_tag];
+            if (write_conflict_sum>max_write_conflict_sum) max_write_conflict_sum = write_conflict_sum;
+        }
+
+
+
         for (int disk_id = 1; disk_id <= N; disk_id++) {
             if (selected_disks.count(disk_id)) continue;
             if (disk_tag_partition_num[disk_id][tag] > MAX_PARTITIONS_PER_TAG) continue;        // 不允许该标签在该硬盘上的区间块数超出上限
@@ -112,30 +142,30 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             for (const auto& exist_tag : disk_tag_kind[disk_id])
                 write_conflict_sum += write_conflict_matrix[tag][exist_tag];
 
-            // 选择策略1：
-            // 1.选择硬盘冲突值最低的硬盘
-            // 2.选择硬盘使用的区间块数量最小的硬盘
-            if (!found || 
-                (conflict_sum < best_conflict_sum) || 
-                (conflict_sum == best_conflict_sum && used_count < best_used_count)) {
-                best_conflict_sum = conflict_sum;
-                best_used_count = used_count;
-                best_disk_id = disk_id;
-                found = true;
-            }
-
-            // // 选择策略2：
-            // // 1.选择硬盘使用的区间块数量最小的硬盘
-            // // 2.选择硬盘冲突值最低的硬盘
-            // if (!found ||
-            //     (used_count < best_used_count) || 
-            //     (used_count = best_used_count && conflict_sum < best_conflict_sum)
-            // ) {
+            // // 选择策略1：
+            // // 1.选择硬盘冲突值最低的硬盘
+            // // 2.选择硬盘使用的区间块数量最小的硬盘
+            // if (!found || 
+            //     (conflict_sum < best_conflict_sum) || 
+            //     (conflict_sum == best_conflict_sum && used_count < best_used_count)) {
             //     best_conflict_sum = conflict_sum;
             //     best_used_count = used_count;
             //     best_disk_id = disk_id;
             //     found = true;
             // }
+
+            // 选择策略2：
+            // 1.选择硬盘使用的区间块数量最小的硬盘
+            // 2.选择硬盘冲突值最低的硬盘
+            if (!found ||
+                (used_count < best_used_count) || 
+                (used_count = best_used_count && conflict_sum < best_conflict_sum)
+            ) {
+                best_conflict_sum = conflict_sum;
+                best_used_count = used_count;
+                best_disk_id = disk_id;
+                found = true;
+            }
 
             // // 选择策略3：
             // // 1.选择硬盘写冲突值最低的硬盘
@@ -146,6 +176,40 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             // ) {
             //     best_write_conflict_sum = write_conflict_sum;
             //     best_used_count = used_count;
+            //     best_disk_id = disk_id;
+            //     found = true;
+            // }
+
+            // // 选择策略4：
+            // // used_count 惩罚
+            // // conflict_sum 惩罚
+            // // socre = w1 * used_count + w2 * conflict_sum
+            // double w1 = 10.0;  // 1 10 都一样的低
+            // double w2 = 1.0;
+            // double norm_used_count = used_count / max_used_count;
+            // double norm_conflict_sum = conflict_sum / max_conflict_sum;
+            // double score = - w1 * norm_used_count - w2 * norm_conflict_sum;
+            // if (!found ||
+            //     (score > best_score)
+            // ) {
+            //     best_score = score;
+            //     best_disk_id = disk_id;
+            //     found = true;
+            // }
+
+            // // 选择策略5：
+            // // socre = w1 * used_count + w2 * conflict_sum + w3 * write_conflict_sum
+            // double w1 = 0.5;
+            // double w2 = 0.1;
+            // double w3 = 0.1;
+            // double norm_used_count = used_count / max_used_count;
+            // double norm_conflict_sum = conflict_sum / max_conflict_sum;
+            // double norm_write_conflict_sum = write_conflict_sum / max_write_conflict_sum;
+            // double score = - w1 * norm_used_count - w2 * norm_conflict_sum - w3 * norm_write_conflict_sum;
+            // if (!found ||
+            //     (score > best_score)
+            // ) {
+            //     best_score = score;
             //     best_disk_id = disk_id;
             //     found = true;
             // }

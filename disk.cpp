@@ -11,7 +11,8 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
     , token_manager(max_tokens)
     , head_free(true)
     , part_p(nullptr)
-    , last_ok(true) {
+    , last_ok(true)
+    , curr_time(0) {
     // 初始化每个存储单元的分区信息
     storage_partition_map.resize(disk_capacity + 1);        // 存储单元编号从 1 到 disk_capacity
     partitions.resize(DISK_PARTITIONS + 1);                 // 分区编号从 1 到 20
@@ -194,7 +195,12 @@ void Disk::reflash_partition_score(){
     }
     initialize_partitions();
 }
-void Disk::update_partition_info(int partition_id, float score){
+
+void Disk::update_partition_head(int part_id, int head){
+    partitions[part_id].head_position = head;
+}
+
+void Disk::update_partition_info(int partition_id, double score){
     // if (partition_id <= 0 || partition_id > partitions.size() - 1 || score <= 0) return;
     partitions[partition_id].score = score;
     // 调用动态堆 update 操作，调整该分区在堆中的位置

@@ -326,42 +326,57 @@ void read_action(int t)
     // 每个磁头寻找要读的对象进行读操作  
     for(int i=1; i<=N;){
         assert(i <= N && i >= 1);
+        
+        int head = disks[i].get_head_position();
         // 维护已有请求 应当磁头空闲时候进行维护
-        if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
+        if(disks[i].head_is_free() && t != disks[i].curr_time){ //磁头空闲，需要设置新的读取对象
             // std::cerr<<"----------------------------------------------"<<std::endl;
             // std::cerr<<"disk "<<i<<" head is free"<<std::endl;
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
+            disks[i].curr_time = t;
+            
             bool has_request = false;
             // // 遍历硬盘所有分区对应的所有对象 请求
             // // 遍历硬盘有请求的分区
             // // 每个分区的有请求的对象
             const std::vector<int>& storage_ = disks[i].get_storage(); // 获取硬盘存储单元
             for(int partition_id = 1; partition_id <= DISK_PARTITIONS; ++partition_id){
+                disks[i].update_partition_head(partition_id, head); // 传递磁头位置给区间块
                 // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
                 int start = disks[i].get_partition_start(partition_id);
                 int size = disks[i].get_partition_size(partition_id);
                 const int* subStorage = storage_.data() + start; // 获取分区的存储单元
                 
-                int t0 = t;
-                // int dis = disks[i].get_distance_to_head(start); // 计算距离
+                double t0 = t;
+                int dis = disks[i].get_distance_to_head(start); // 计算距离
                 // if (disks[i].get_cur_tokens() == G && dis > G - 64) t0 += 1;
                 // else if (disks[i].get_cur_tokens() < G && dis > disks[i].get_cur_tokens() - 64) t0 += 2;
+                t0 += (double)dis / (G - 64);
 
-                float score = 0;
+                double score = 0;
                 // 遍历分区的所有存储单元  // 后续替换为直接遍历分区的所有对象
-                for(int idx=0; idx < size; ++idx){
+                // for(int idx=0; idx < size; ++idx){
+                const auto& partition_objects = disks[i].get_partition_info(partition_id).partition_object;
+                const size_t obj_count = partition_objects.size();
+                const int* obj_ptr = partition_objects.data();
+                // for(const auto& object_id : disks[i].get_partition_info(partition_id).partition_object){
+                for(size_t obj_idx = 0; obj_idx < obj_count; ++obj_idx) {
+                    int object_id = obj_ptr[obj_idx];
+                    // if(t >= 42449)    
+                        // std::cerr<<"object "<<object_id<<std::endl;
+                    // if(object_id == 0) continue; // 目标不存在，则跳过
                     // if(idx > 0 && subStorage[idx-1] == subStorage[idx]) continue; // 跳过连续相同的存储单元(对象)
-                    int object_id = subStorage[idx];
+                    // int object_id = subStorage[idx];
                     if(object_id == 0) continue; // 目标不存在，则跳过
                      // 假设连续存储的,获取size之后用来跳过(后续调整为直接遍历分区的所有对象,不需要考虑size)
-                    idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
+                    // idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
 
                     // 目标存在，获取request信息 
                     auto& active_reqs = objects[object_id].get_active_requests(); // 获取对象的活跃请求列表
                     for(size_t i=0; i<active_reqs.size(); ++i){ 
                         auto & req = requests[active_reqs[i]];
                         if(req.is_up || req.is_completed()){ // 跳过已经完成的请求
-                            ++i;
+                            // ++i;
                             continue;
                         }
                         score += req.get_score(t0);
@@ -370,18 +385,29 @@ void read_action(int t)
                 // std::cerr << "disk " << i << " partition " << partition_id << " score " << score << std::endl;
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
+                // if(t >= 42449){
+                // std::cerr<<"disk "<<i<<" partition "<<partition_id<<" head "<<head<<std::endl;
+                // std::cerr<<"score "<<score<<std::endl;
+                // }
             }
+            // std::cerr<<"disk "<<i<<" has request "<<has_request<<std::endl;
             if(!has_request) {
+                
+                // std::cerr<<"disk "<<i<<" has request "<<has_request<<std::endl;
                 // std::cerr << "disk " << i << " head not has request" << std::endl;
                 printf("#\n"); // 当前硬盘无请求，不操作
+                
+                // std::cerr<<"disk "<<i<<" has request "<<has_request<<std::endl;
                 i++;
                 continue; // 下一个硬盘
             }
             // 若有请求需要处理
             disks[i].set_head_busy();
         }
+        else if(disks[i].head_is_free()){
+            disks[i].set_head_busy();
+        }
         // 磁头忙（设置好了要读取的对象）进行读取操作
-        int head = disks[i].get_head_position();
         // auto part_p = disks[i].get_top_partition();
         const PartitionInfo* part_p;
         if(!disks[i].last_ok) { // 上次未读取完
@@ -394,22 +420,12 @@ void read_action(int t)
                 // std::cerr<<"-------------------------------------------"<<std::endl;
                 disks[i].last_ok = true;
                 disks[i].set_head_free();
+                printf("#\n"); // 当前硬盘无请求，不操作
                 i++;
                 continue;
             }
             disks[i].part_p = part_p; // 更新当前分区
-            // if(part_p == disks[i].part_p){ // 还是原来分区
-            //     assert(disks[i].part_p);
-            //     auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
-            //     if(disks[i].part_p->next == second_part_p && second_part_p->score > 0){ // 如果是下一个分区，先操作下一个分区(下一个分区有分数的话)
-            //         disks[i].part_p = second_part_p;
-            //         part_p = second_part_p;
-            //     }else{
-            //         disks[i].part_p = part_p; // 更新当前分区
-            //     }
-            // }else{
-            //     disks[i].part_p = part_p; // 更新当前分区
-            // }
+            // assert(part_p->score != disks[i].get_pop_partition()->score);
         }
         
         // 取出存储了对象的位置vector

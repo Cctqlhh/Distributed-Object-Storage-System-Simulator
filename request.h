@@ -29,11 +29,26 @@ public:
     int get_prev_id() const;
     void set_object_id(int id);
 
-    double compute_time_score_update(int t) const;
-    double get_size_score() const;
+    // double compute_time_score_update(double t) const;
+    double compute_time_score_update(double t) const {
+        if(is_done || is_up) return 0.0f;
+        int time_ = t - timestamp;
+        return (time_ <= 10) ? (1.0 - 0.005 * time_) : 
+               (time_ <= 105) ? (1.05 - 0.01 * time_) : 0.0;
+    }
+    // double get_size_score() const;
+    double get_size_score() const{
+        return size_score;
+    }
     double get_time_score() const;
     double get_delete_prob(int t) const;
-    double get_score(int t) const;
+    // double get_score(double t) const;
+    double get_score(double t) const{
+        double score = compute_time_score_update(t);
+        // double score = t > time_score + 105 ? 0.0 : (1.0 - (t - time_score) / 105.0);
+        return score * size_score;
+        // return size_score * score;
+    }
     
     void set_is_done_list(int block_idx);
 };

@@ -839,35 +839,43 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
         if ((int)chosen_partitions.size() == REP_NUM) break;
     }
 
+    // while ((int)chosen_partitions.size() < REP_NUM) {
     // ========== Step 2：选择 0 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.zero_tag_partitions, &tag_manager.one_tag_partitions, 0);
     }
+        // try_allocate_from_tag_partitions(tag_manager.zero_tag_partitions, &tag_manager.one_tag_partitions, 0);
 
     // ========== Step 3：选择 1 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.one_tag_partitions, &tag_manager.two_tag_partitions, 1);
     }
+        // try_allocate_from_tag_partitions(tag_manager.one_tag_partitions, &tag_manager.two_tag_partitions, 1);
 
     // ========== Step 4：选择 2 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.two_tag_partitions, &tag_manager.three_tag_partitions, 2);
     }
+        // try_allocate_from_tag_partitions(tag_manager.two_tag_partitions, &tag_manager.three_tag_partitions, 2);
+        
 
     // ========== Step 5：选择 3 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.three_tag_partitions, &tag_manager.more_tag_partitions, 3); 
     }
+        // try_allocate_from_tag_partitions(tag_manager.three_tag_partitions, &tag_manager.more_tag_partitions, 3); 
 
     // ========== Step 6（兜底）：遍历所有区间块，强行挑选满足条件的块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.more_tag_partitions, nullptr, 4); 
     }
+        // try_allocate_from_tag_partitions(tag_manager.more_tag_partitions, nullptr, 4); 
+    // }
 
     // ========== 最终校验：必须分配到了三个副本 ==========
     assert(chosen_partitions.size() == REP_NUM && "Partition selection failed. Not enough valid partitions found.");

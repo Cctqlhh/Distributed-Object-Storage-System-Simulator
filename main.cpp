@@ -361,7 +361,7 @@ void read_action(int t)
                     for(size_t i=0; i<active_reqs.size(); ++i){ 
                         auto & req = requests[active_reqs[i]];
                         if(req.is_up || req.is_completed()){ // 跳过已经完成的请求
-                            ++i;
+                            // ++i;
                             continue;
                         }
                         score += req.get_score(t0);

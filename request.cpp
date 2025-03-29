@@ -58,6 +58,8 @@ double Request::get_delete_prob(int t) const{
 double Request::get_score(int t) const{
     // double score = compute_time_score_update(t);
     // return score * size_score * (1 - get_delete_prob(t));
+    // double score = t > time_score + 105 ? 0.0 : (1.0 - (t - time_score) / 105.0);
+    // return score * size_score;
     return time_score * size_score;
 
     // 1. 计算时间得分（double 精度）

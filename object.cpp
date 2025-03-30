@@ -11,7 +11,8 @@ Object::Object(int id, int size, int tag_id)
     , unit_pos(REP_NUM + 1, std::vector<int>(size + 1))
     , partition_id(REP_NUM + 1)
     , request_num(0)
-    , is_continue(REP_NUM + 1) {}
+    , is_continue(REP_NUM + 1) 
+    , current_is_read(false) {}
     
 
 // // 写策略1：采用散写策略
@@ -50,68 +51,204 @@ Object::Object(int id, int size, int tag_id)
 //     return false;
 // }
 
-// 写策略2：先尝试连续写，再采用散写策略
+// // 写策略2：先尝试连续写，再采用散写策略
+// bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
+//     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 检查副本索引
+//     int disk_capacity = disk.get_capacity();
+
+//     bool continuous; // 是否连续写
+
+//     // 尝试连续写：扫描[start_pos, end_pos]寻找连续空闲区间块，长度等于size
+//     int contiguous_start = -1;
+//     int current_streak = 0;
+//     for (int i = start_pos; i <= end_pos; i++) {
+//         if (disk.is_free(i)) {
+//             if (current_streak == 0) {
+//                 contiguous_start = i;  // 标记连续区间开始位置
+//             }
+//             current_streak++;
+//             if (current_streak == size) {
+//                 break; // 找到足够长度的连续区间
+//             }
+//         } else {
+//             // 如果遇到非空闲位置，重置计数
+//             current_streak = 0;
+//             contiguous_start = -1;
+//         }
+//     }
+
+//     if (current_streak == size) {
+//         // 如果找到了连续区间，则连续写入
+//         continuous = true;
+//         for (int i = contiguous_start; i < contiguous_start + size; i++) {
+//             if (!disk.write(i, object_id)) {
+//                 assert(false && "Contiguous write failed unexpectedly");
+//                 return false;
+//             }
+//             // 记录写入的存储位置，注意这里下标从1开始
+//             unit_pos[replica_idx][i - contiguous_start + 1] = i;
+//         }
+//         replica_disks[replica_idx] = disk.get_id();
+//         disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+//         is_continue[replica_idx] = continuous; 
+//         return true;
+//     } else {
+//         // 如果没有找到连续空闲区域，则采用原来的散写策略
+//         continuous = false;
+//         int current_write_point = 0;
+//         for (int i = start_pos; i <= end_pos; i++) {
+//             if (disk.is_free(i)) {
+//                 if (disk.write(i, object_id)) {
+//                     unit_pos[replica_idx][++current_write_point] = i;
+//                     if (current_write_point == size) {
+//                         replica_disks[replica_idx] = disk.get_id();
+//                         disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+//                         is_continue[replica_idx] = continuous; 
+//                         return true;
+//                     }
+//                 }
+//             }
+//         }
+//         // 理论上不应该走到这里，写入失败直接断言
+//         assert(current_write_point == size && "The write operation failed.");
+//         return false;
+//     }
+// }
+
+// // 写策略3：先尝试连续写，再采用散写策略，优先插起始位置和结束位置距离最近的空
+// bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
+//     assert(replica_idx > 0 && replica_idx <= REP_NUM);
+//     bool continuous = false;
+
+//     // 尝试连续写：扫描 [start_pos, end_pos] 寻找连续空闲区间块，长度等于 size
+//     int contiguous_start = -1;
+//     int current_streak = 0;
+//     for (int i = start_pos; i <= end_pos; i++) {
+//         if (disk.is_free(i)) {
+//             if (current_streak == 0) {
+//                 contiguous_start = i;  // 标记连续区间开始位置
+//             }
+//             current_streak++;
+//             if (current_streak == size) {
+//                 break; // 找到足够长度的连续区间
+//             }
+//         } else {
+//             // 遇到非空闲位置则重置计数
+//             current_streak = 0;
+//             contiguous_start = -1;
+//         }
+//     }
+
+//     if (current_streak == size) {
+//         // 找到连续空间，进行连续写入
+//         continuous = true;
+//         for (int i = contiguous_start; i < contiguous_start + size; i++) {
+//             if (!disk.write(i, object_id)) {
+//                 assert(false && "Contiguous write failed unexpectedly");
+//                 return false;
+//             }
+//             // 记录写入的存储位置，下标从 1 开始
+//             unit_pos[replica_idx][i - contiguous_start + 1] = i;
+//         }
+//         replica_disks[replica_idx] = disk.get_id();
+//         disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+//         is_continue[replica_idx] = continuous;
+//         return true;
+//     } else {
+//         // 没有找到连续空间，采用散写策略
+//         continuous = false;
+//         std::vector<int> free_positions;
+//         // 收集区间内所有空闲位置
+//         for (int i = start_pos; i <= end_pos; i++) {
+//             if (disk.is_free(i)) {
+//                 free_positions.push_back(i);
+//             }
+//         }
+//         // 如果可用空闲位置数量不足，则写入失败
+//         if (free_positions.size() < static_cast<size_t>(size)) {
+//             assert(false && "Not enough free positions for scattered write.");
+//             return false;
+//         }
+//         // 使用滑动窗口找到最小范围的空闲位置子序列
+//         int best_start_index = 0;
+//         int best_range = std::numeric_limits<int>::max();
+//         for (size_t i = 0; i <= free_positions.size() - size; i++) {
+//             int range = free_positions[i + size - 1] - free_positions[i];
+//             if (range < best_range) {
+//                 best_range = range;
+//                 best_start_index = i;
+//             }
+//         }
+//         // 将选定的散写位置写入磁盘
+//         int current_write_point = 0;
+//         for (size_t j = best_start_index; j < best_start_index + size; j++) {
+//             int pos = free_positions[j];
+//             if (disk.write(pos, object_id)) {
+//                 unit_pos[replica_idx][++current_write_point] = pos;
+//             }
+//         }
+//         // 写入成功后更新相关信息
+//         if (current_write_point == size) {
+//             replica_disks[replica_idx] = disk.get_id();
+//             disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+//             is_continue[replica_idx] = continuous;
+//             return true;
+//         }
+//         // 理论上不应走到这里，若失败直接断言
+//         assert(current_write_point == size && "Scattered write operation failed.");
+//         return false;
+//     }
+// }
+
+// 写策略4：策略1的改进版
 bool Object::write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos) {
     assert(replica_idx > 0 && replica_idx <= REP_NUM);  // 检查副本索引
-    int disk_capacity = disk.get_capacity();
+    int current_write_point = 0;
+    bool continuous = false;  // 默认先认为不是连续写，后续根据选取的空闲位置序列判断
 
-    bool continuous; // 是否连续写
-
-    // 尝试连续写：扫描[start_pos, end_pos]寻找连续空闲区间块，长度等于size
-    int contiguous_start = -1;
-    int current_streak = 0;
+    // 预先收集 [start_pos, end_pos] 范围内所有空闲位置
+    std::vector<int> free_positions;
+    free_positions.reserve(end_pos - start_pos + 1);
     for (int i = start_pos; i <= end_pos; i++) {
         if (disk.is_free(i)) {
-            if (current_streak == 0) {
-                contiguous_start = i;  // 标记连续区间开始位置
-            }
-            current_streak++;
-            if (current_streak == size) {
-                break; // 找到足够长度的连续区间
-            }
-        } else {
-            // 如果遇到非空闲位置，重置计数
-            current_streak = 0;
-            contiguous_start = -1;
+            free_positions.push_back(i);
         }
     }
 
-    if (current_streak == size) {
-        // 如果找到了连续区间，则连续写入
-        continuous = true;
-        for (int i = contiguous_start; i < contiguous_start + size; i++) {
-            if (!disk.write(i, object_id)) {
-                assert(false && "Contiguous write failed unexpectedly");
-                return false;
-            }
-            // 记录写入的存储位置，注意这里下标从1开始
-            unit_pos[replica_idx][i - contiguous_start + 1] = i;
-        }
-        replica_disks[replica_idx] = disk.get_id();
-        disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
-        is_continue[replica_idx] = continuous; 
-        return true;
-    } else {
-        // 如果没有找到连续空闲区域，则采用原来的散写策略
-        continuous = false;
-        int current_write_point = 0;
-        for (int i = start_pos; i <= end_pos; i++) {
-            if (disk.is_free(i)) {
-                if (disk.write(i, object_id)) {
-                    unit_pos[replica_idx][++current_write_point] = i;
-                    if (current_write_point == size) {
-                        replica_disks[replica_idx] = disk.get_id();
-                        disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
-                        is_continue[replica_idx] = continuous; 
-                        return true;
-                    }
-                }
-            }
-        }
-        // 理论上不应该走到这里，写入失败直接断言
-        assert(current_write_point == size && "The write operation failed.");
+    // 检查是否有足够的空闲位置
+    if (free_positions.size() < static_cast<size_t>(size)) {
+        assert(false && "Not enough free positions available for write.");
         return false;
     }
+
+    // 使用滑动窗口找到距离最小（即起始与结束位置间隔最小）的子序列
+    int best_start_index = 0;
+    int best_range = std::numeric_limits<int>::max();
+    for (size_t i = 0; i <= free_positions.size() - size; i++) {
+        int range = free_positions[i + size - 1] - free_positions[i];
+        if (range < best_range) {
+            best_range = range;
+            best_start_index = i;
+        }
+    }
+
+    // 判断所选子序列是否为连续的：如果末尾与起始位置的差正好为 size-1，则证明每个位置都是顺序连续的
+    continuous = (free_positions[best_start_index + size - 1] - free_positions[best_start_index] == size - 1);
+
+    // 对选定的空闲位置进行写入
+    for (size_t j = best_start_index; j < best_start_index + size; j++) {
+        int pos = free_positions[j];
+        if (disk.write(pos, object_id)) {
+            unit_pos[replica_idx][++current_write_point] = pos;
+        }
+    }
+
+    // 必须写入成功所有块，否则直接报错
+    assert(current_write_point == size && "The write operation failed.");
+    replica_disks[replica_idx] = disk.get_id();
+    disk.reduce_residual_capacity(chosen_partitions[replica_idx - 1].second, size);
+    is_continue[replica_idx] = continuous;
+    return true;
 }
 
 void Object::delete_replica(int replica_idx, Disk& disk) {
@@ -275,539 +412,547 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                 int residual = disks[disk_id].get_residual_capacity(part_id);
                 if (residual > max_residual) max_residual = residual;
             }
+            // // 第一次遍历选磁头后面的区间块，第二次遍历选所有的区间块
+            for (int head_mode = 0; head_mode <= 1; head_mode++) {
+                if (head_mode == 0 && !current_is_read ) continue;
+                // 遍历该集合下所有满足条件的区间块
+                for (const auto& candidate  : from_set) {
+                    int disk_id = candidate.first;
+                    int part_id = candidate.second;
+                    if (tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id)) continue;  // 该区间块包含该对象标签，跳过
+                    if (!can_use(disk_id, part_id)) continue;   // 该区间块不满足条件，跳过
+                    int head_position = disks[disk_id].get_head_position();
+                    int head_part_id = disks[disk_id].get_partition_id(head_position);
+                    // 先不选磁头后面的区间块
+                    if (head_mode == 0) {
+                        if (part_id <= head_part_id) continue;
+                    }
+                    const auto& tags = tag_manager.disk_partition_usage_tagkind[disk_id][part_id];
+                    // if ((int)tags.size() != expected_tag_count) continue;   
+                    // 不是当前标签数量的区间块，跳过 
+                    if (expected_tag_count < 4) {
+                        if ((int)tags.size() != expected_tag_count) continue;
+                    } else {
+                        if ((int)tags.size() < expected_tag_count) continue;
+                    }
 
-            // 遍历该集合下所有满足条件的区间块
-            for (const auto& candidate  : from_set) {
-                int disk_id = candidate.first;
-                int part_id = candidate.second;
-                if (tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id)) continue;  // 该区间块包含该对象标签，跳过
-                if (!can_use(disk_id, part_id)) continue;   // 该区间块不满足条件，跳过
-                const auto& tags = tag_manager.disk_partition_usage_tagkind[disk_id][part_id];
-                // if ((int)tags.size() != expected_tag_count) continue;   
-                // 不是当前标签数量的区间块，跳过 
-                if (expected_tag_count < 4) {
-                    if ((int)tags.size() != expected_tag_count) continue;
-                } else {
-                    if ((int)tags.size() < expected_tag_count) continue;
+                    // 计算区间内部冲突值：当前对象标签与该区间中所有标签的冲突值之和
+                    int inner_conflict = 0; 
+                    for (int t : tags) {
+                        inner_conflict += conflict_matrix[tag_id][t]; // inner_conflict有可能还是0
+                    }
+
+                    // 计算整盘冲突值：当前对象标签与该磁盘上所有已分配标签的冲突值之和
+                    int disk_conflict = 0;
+                    for (int t : tag_manager.disk_tag_kind[disk_id]) {
+                        disk_conflict += conflict_matrix[tag_id][t];
+                    }
+
+                    // 计算该硬盘上所有标签分区数量的和（越小代表该磁盘负载越低），可能会超20，但不影响选择
+                    int disk_tag_partition_count = 0;
+                    for (const auto& entry : tag_manager.disk_tag_partition_num[disk_id]) {
+                        disk_tag_partition_count += entry.second;
+                    }
+
+                    // 获取该区间块剩余容量
+                    int residual = disks[disk_id].get_residual_capacity(part_id);
+
+                    // // 为标签选择新区间块的策略1：
+                    // // 1. inner_conflict 越大越好
+                    // // 2. 若相同，则 disk_conflict 越小越好
+                    // // 3. 若仍相同，则 disk_tag_partition_count 越小越好
+                    // // 4. 最后选 residual 越大越好
+                    // if (!found ||
+                    //     (inner_conflict > best_inner_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略2：
+                    // // 1. disk_tag_partition_count 越小越好
+                    // // 2. 若相同，则 inner_conflict 越大越好
+                    // // 3. 若相同，则 disk_conflict 越小越好
+                    // // 4. 若相同，则 residual 越大越好
+                    // if (!found ||
+                    //     (disk_tag_partition_count < best_disk_tag_partition_count) ||       
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略3：
+                    // // 1. residual 越大越好 
+                    // // 2. 最后选 inner_conflict 越大越好
+                    // // 3. 若相同，则 disk_conflict 越小越好
+                    // // 4. 若仍相同，则 disk_tag_partition_count 越小越好
+                    // if (!found ||
+                    //     (residual > best_residual) ||
+                    //     (residual == best_residual && inner_conflict > best_inner_conflict) ||
+                    //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                    //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略4：
+                    // // 1. disk_tag_partition_count 越小越好 
+                    // // 2. 若相同，则 residual 越大越好 
+                    // // 3. 若相同，则 inner_conflict 越大越好
+                    // // 4. 若相同，则 disk_conflict 越小越好
+                    // if (!found ||
+                    //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && inner_conflict > best_inner_conflict) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略5：
+                    // // 1. residual 越大越好 
+                    // // 2. 若相同，则 disk_tag_partition_count 越小越好
+                    // // 3. 若相同，则 inner_conflict 越大越好
+                    // // 4. 若相同，则 disk_conflict 越小越好
+                    // if (!found ||
+                    //     (residual > best_residual) ||
+                    //     (residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                    //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // 为标签选择新区间块的策略6：
+                    // 1. disk_tag_partition_count 越小越好 
+                    // 2. 若相同，则 residual 越大越好 
+                    // 3. 若相同，则 disk_conflict 越小越好
+                    // 4. 若相同，则 inner_conflict 越大越好
+                    if (!found ||
+                        (disk_tag_partition_count < best_disk_tag_partition_count) ||
+                        (disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
+                        (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && disk_conflict < best_disk_conflict) ||
+                        (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) 
+                    ) {
+                        best_partition = candidate;
+                        best_inner_conflict = inner_conflict;
+                        best_disk_conflict = disk_conflict;
+                        best_disk_tag_partition_count = disk_tag_partition_count;
+                        best_residual = residual;
+                        found = true;
+                    }
+
+                    // // 为标签选择新区间块的策略7：
+                    // // 策略 (I, D, R, P):
+                    // // 1. inner_conflict 越大越好
+                    // // 2. disk_conflict 越小越好
+                    // // 3. residual 越大越好
+                    // // 4. disk_tag_partition_count 越小越好
+                    // if (!found ||
+                    //     (inner_conflict > best_inner_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual) ||
+                    //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略8：
+                    // // 策略 (I, P, D, R):
+                    // // 1. inner_conflict 越大越好
+                    // // 2. disk_tag_partition_count 越小越好
+                    // // 3. disk_conflict 越小越好
+                    // // 4. residual 越大越好
+                    // if (!found ||
+                    //     (inner_conflict > best_inner_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && residual > best_residual)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略9：
+                    // // 策略 (I, P, R, D):
+                    // // 1. inner_conflict 越大越好
+                    // // 2. disk_tag_partition_count 越小越好
+                    // // 3. residual 越大越好
+                    // // 4. disk_conflict 越小越好
+                    // if (!found ||
+                    //     (inner_conflict > best_inner_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
+                    //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && disk_conflict < best_disk_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略10：
+                    // // 策略 (I, R, D, P):
+                    // // 1. inner_conflict 越大越好
+                    // // 2. residual 越大越好
+                    // // 3. disk_conflict 越小越好
+                    // // 4. disk_tag_partition_count 越小越好
+                    // if (!found ||
+                    //     (inner_conflict > best_inner_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && residual > best_residual) ||
+                    //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_conflict < best_disk_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略11：
+                    // // 策略 (I, R, P, D):
+                    // // 1. inner_conflict 越大越好
+                    // // 2. residual 越大越好
+                    // // 3. disk_tag_partition_count 越小越好
+                    // // 4. disk_conflict 越小越好
+                    // if (!found ||
+                    //     (inner_conflict > best_inner_conflict) ||
+                    //     (inner_conflict == best_inner_conflict && residual > best_residual) ||
+                    //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略12：
+                    // // 策略 (D, I, P, R):
+                    // // 1. disk_conflict 越小越好
+                    // // 2. inner_conflict 越大越好
+                    // // 3. disk_tag_partition_count 越小越好
+                    // // 4. residual 越大越好
+                    // if (!found ||
+                    //     (disk_conflict < best_disk_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略13：
+                    // // 策略 (D, I, R, P):
+                    // // 1. disk_conflict 越小越好
+                    // // 2. inner_conflict 越大越好
+                    // // 3. residual 越大越好
+                    // // 4. disk_tag_partition_count 越小越好
+                    // if (!found ||
+                    //     (disk_conflict < best_disk_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && residual > best_residual) ||
+                    //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略14：
+                    // // 策略 (D, P, I, R):
+                    // // 1. disk_conflict 越小越好
+                    // // 2. disk_tag_partition_count 越小越好
+                    // // 3. inner_conflict 越大越好
+                    // // 4. residual 越大越好
+                    // if (!found ||
+                    //     (disk_conflict < best_disk_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && residual > best_residual)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略15：
+                    // // 策略 (D, P, R, I):
+                    // // 1. disk_conflict 越小越好
+                    // // 2. disk_tag_partition_count 越小越好
+                    // // 3. residual 越大越好
+                    // // 4. inner_conflict 越大越好
+                    // if (!found ||
+                    //     (disk_conflict < best_disk_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
+                    //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && inner_conflict > best_inner_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略16：
+                    // // 策略 (D, R, P, I):
+                    // // 1. disk_conflict 越小越好
+                    // // 2. residual 越大越好
+                    // // 3. disk_tag_partition_count 越小越好
+                    // // 4. inner_conflict 越大越好
+                    // if (!found ||
+                    //     (disk_conflict < best_disk_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && residual > best_residual) ||
+                    //     (disk_conflict == best_disk_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_conflict == best_disk_conflict && residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略17：
+                    // // 策略 (P, I, R, D):
+                    // // 1. disk_tag_partition_count 越小越好
+                    // // 2. inner_conflict 越大越好
+                    // // 3. residual 越大越好
+                    // // 4. disk_conflict 越小越好
+                    // if (!found ||
+                    //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && residual > best_residual) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && residual == best_residual && disk_conflict < best_disk_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略18：
+                    // // 策略 (P, D, I, R):
+                    // // 1. disk_tag_partition_count 越小越好
+                    // // 2. disk_conflict 越小越好
+                    // // 3. inner_conflict 越大越好
+                    // // 4. residual 越大越好
+                    // if (!found ||
+                    //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && residual > best_residual)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略19：
+                    // // 策略 (P, D, R, I):
+                    // // 1. disk_tag_partition_count 越小越好
+                    // // 2. disk_conflict 越小越好
+                    // // 3. residual 越大越好
+                    // // 4. inner_conflict 越大越好
+                    // if (!found ||
+                    //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && residual > best_residual) ||
+                    //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && residual == best_residual && inner_conflict > best_inner_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略20：
+                    // // 策略 (R, I, P, D):
+                    // // 1. residual 越大越好
+                    // // 2. inner_conflict 越大越好
+                    // // 3. disk_tag_partition_count 越小越好
+                    // // 4. disk_conflict 越小越好
+                    // if (!found ||
+                    //     (residual > best_residual) ||
+                    //     (residual == best_residual && inner_conflict > best_inner_conflict) ||
+                    //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略21：
+                    // // 策略 (R, D, I, P):
+                    // // 1. residual 越大越好
+                    // // 2. disk_conflict 越小越好
+                    // // 3. inner_conflict 越大越好
+                    // // 4. disk_tag_partition_count 越小越好
+                    // if (!found ||
+                    //     (residual > best_residual) ||
+                    //     (residual == best_residual && disk_conflict < best_disk_conflict) ||
+                    //     (residual == best_residual && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
+                    //     (residual == best_residual && disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略22：
+                    // // 策略 (R, P, D, I):
+                    // // 1. residual 越大越好
+                    // // 2. disk_tag_partition_count 越小越好
+                    // // 3. disk_conflict 越小越好
+                    // // 4. inner_conflict 越大越好
+                    // if (!found ||
+                    //     (residual > best_residual) ||
+                    //     (residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
+                    //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略23：
+                    // // 策略 (D, R, I, P):
+                    // // 1. disk_conflict 越小越好
+                    // // 2. residual 越大越好
+                    // // 3. inner_conflict 越大越好
+                    // // 4. disk_tag_partition_count 越小越好
+                    // if (!found ||
+                    //     (disk_conflict < best_disk_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && residual > best_residual) ||
+                    //     (disk_conflict == best_disk_conflict && residual == best_residual && inner_conflict > best_inner_conflict) ||
+                    //     (disk_conflict == best_disk_conflict && residual == best_residual && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // // 为标签选择新区间块的策略24：
+                    // // 为标签选择新区间块的策略24：
+                    // // 策略 (R, P, I, D):
+                    // // 1. residual 越大越好
+                    // // 2. disk_tag_partition_count 越小越好
+                    // // 3. inner_conflict 越大越好
+                    // // 4. disk_conflict 越小越好
+                    // if (!found ||
+                    //     (residual > best_residual) ||
+                    //     (residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
+                    //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
+                    //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_inner_conflict = inner_conflict;
+                    //     best_disk_conflict = disk_conflict;
+                    //     best_disk_tag_partition_count = disk_tag_partition_count;
+                    //     best_residual = residual;
+                    //     found = true;
+                    // }
+
+                    // // 为标签选择新区间块的策略25：
+                    // // double score = -w1 * norm_count - w2 * norm_disk_conflict + w3 * norm_inner_conflict + w4 * norm_residual;
+                    // // 设置权重（可根据实际情况调优）
+                    // double w1 = 0.5; // 权重1：对硬盘已分配区间块数量的惩罚（越小越好）
+                    // double w2 = 0.1; // 权重2：对整盘冲突值的惩罚（越小越好）
+                    // double w3 = 0.1; // 权重3：对区间内部冲突值的奖励（越大越好）
+                    // double w4 = 0.5; // 权重4：对剩余容量的奖励（越大越好）
+                    // double norm_count = static_cast<double>(disk_tag_partition_count) / max_count;
+                    // double norm_inner_conflict = static_cast<double>(inner_conflict) / max_inner_conflict;
+                    // double norm_disk_conflict = static_cast<double>(disk_conflict) / max_disk_conflict;
+                    // double norm_residual = static_cast<double>(residual) / max_residual;
+                    // double score = -w1 * norm_count - w2 * norm_disk_conflict + w3 * norm_inner_conflict + w4 * norm_residual;
+                    // if (!found ||
+                    //     (score > best_score)
+                    // ) {
+                    //     best_partition = candidate;
+                    //     best_score = score;
+                    //     found = true;
+                    // }
                 }
-
-                // 计算区间内部冲突值：当前对象标签与该区间中所有标签的冲突值之和
-                int inner_conflict = 0; 
-                for (int t : tags) {
-                    inner_conflict += conflict_matrix[tag_id][t]; // inner_conflict有可能还是0
-                }
-
-                // 计算整盘冲突值：当前对象标签与该磁盘上所有已分配标签的冲突值之和
-                int disk_conflict = 0;
-                for (int t : tag_manager.disk_tag_kind[disk_id]) {
-                    disk_conflict += conflict_matrix[tag_id][t];
-                }
-
-                // 计算该硬盘上所有标签分区数量的和（越小代表该磁盘负载越低），可能会超20，但不影响选择
-                int disk_tag_partition_count = 0;
-                for (const auto& entry : tag_manager.disk_tag_partition_num[disk_id]) {
-                    disk_tag_partition_count += entry.second;
-                }
-
-                // 获取该区间块剩余容量
-                int residual = disks[disk_id].get_residual_capacity(part_id);
-
-                // // 为标签选择新区间块的策略1：
-                // // 1. inner_conflict 越大越好
-                // // 2. 若相同，则 disk_conflict 越小越好
-                // // 3. 若仍相同，则 disk_tag_partition_count 越小越好
-                // // 4. 最后选 residual 越大越好
-                // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略2：
-                // // 1. disk_tag_partition_count 越小越好
-                // // 2. 若相同，则 inner_conflict 越大越好
-                // // 3. 若相同，则 disk_conflict 越小越好
-                // // 4. 若相同，则 residual 越大越好
-                // if (!found ||
-                //     (disk_tag_partition_count < best_disk_tag_partition_count) ||       
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略3：
-                // // 1. residual 越大越好 
-                // // 2. 最后选 inner_conflict 越大越好
-                // // 3. 若相同，则 disk_conflict 越小越好
-                // // 4. 若仍相同，则 disk_tag_partition_count 越小越好
-                // if (!found ||
-                //     (residual > best_residual) ||
-                //     (residual == best_residual && inner_conflict > best_inner_conflict) ||
-                //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略4：
-                // // 1. disk_tag_partition_count 越小越好 
-                // // 2. 若相同，则 residual 越大越好 
-                // // 3. 若相同，则 inner_conflict 越大越好
-                // // 4. 若相同，则 disk_conflict 越小越好
-                // if (!found ||
-                //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && inner_conflict > best_inner_conflict) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略5：
-                // // 1. residual 越大越好 
-                // // 2. 若相同，则 disk_tag_partition_count 越小越好
-                // // 3. 若相同，则 inner_conflict 越大越好
-                // // 4. 若相同，则 disk_conflict 越小越好
-                // if (!found ||
-                //     (residual > best_residual) ||
-                //     (residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
-                //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // 为标签选择新区间块的策略6：
-                // 1. disk_tag_partition_count 越小越好 
-                // 2. 若相同，则 residual 越大越好 
-                // 3. 若相同，则 disk_conflict 越小越好
-                // 4. 若相同，则 inner_conflict 越大越好
-                if (!found ||
-                    (disk_tag_partition_count < best_disk_tag_partition_count) ||
-                    (disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
-                    (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && disk_conflict < best_disk_conflict) ||
-                    (disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) 
-                ) {
-                    best_partition = candidate;
-                    best_inner_conflict = inner_conflict;
-                    best_disk_conflict = disk_conflict;
-                    best_disk_tag_partition_count = disk_tag_partition_count;
-                    best_residual = residual;
-                    found = true;
-                }
-
-                // // 为标签选择新区间块的策略7：
-                // // 策略 (I, D, R, P):
-                // // 1. inner_conflict 越大越好
-                // // 2. disk_conflict 越小越好
-                // // 3. residual 越大越好
-                // // 4. disk_tag_partition_count 越小越好
-                // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual > best_residual) ||
-                //     (inner_conflict == best_inner_conflict && disk_conflict == best_disk_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略8：
-                // // 策略 (I, P, D, R):
-                // // 1. inner_conflict 越大越好
-                // // 2. disk_tag_partition_count 越小越好
-                // // 3. disk_conflict 越小越好
-                // // 4. residual 越大越好
-                // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && residual > best_residual)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略9：
-                // // 策略 (I, P, R, D):
-                // // 1. inner_conflict 越大越好
-                // // 2. disk_tag_partition_count 越小越好
-                // // 3. residual 越大越好
-                // // 4. disk_conflict 越小越好
-                // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
-                //     (inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && disk_conflict < best_disk_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略10：
-                // // 策略 (I, R, D, P):
-                // // 1. inner_conflict 越大越好
-                // // 2. residual 越大越好
-                // // 3. disk_conflict 越小越好
-                // // 4. disk_tag_partition_count 越小越好
-                // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && residual > best_residual) ||
-                //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_conflict < best_disk_conflict) ||
-                //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略11：
-                // // 策略 (I, R, P, D):
-                // // 1. inner_conflict 越大越好
-                // // 2. residual 越大越好
-                // // 3. disk_tag_partition_count 越小越好
-                // // 4. disk_conflict 越小越好
-                // if (!found ||
-                //     (inner_conflict > best_inner_conflict) ||
-                //     (inner_conflict == best_inner_conflict && residual > best_residual) ||
-                //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (inner_conflict == best_inner_conflict && residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略12：
-                // // 策略 (D, I, P, R):
-                // // 1. disk_conflict 越小越好
-                // // 2. inner_conflict 越大越好
-                // // 3. disk_tag_partition_count 越小越好
-                // // 4. residual 越大越好
-                // if (!found ||
-                //     (disk_conflict < best_disk_conflict) ||
-                //     (disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
-                //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略13：
-                // // 策略 (D, I, R, P):
-                // // 1. disk_conflict 越小越好
-                // // 2. inner_conflict 越大越好
-                // // 3. residual 越大越好
-                // // 4. disk_tag_partition_count 越小越好
-                // if (!found ||
-                //     (disk_conflict < best_disk_conflict) ||
-                //     (disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
-                //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && residual > best_residual) ||
-                //     (disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略14：
-                // // 策略 (D, P, I, R):
-                // // 1. disk_conflict 越小越好
-                // // 2. disk_tag_partition_count 越小越好
-                // // 3. inner_conflict 越大越好
-                // // 4. residual 越大越好
-                // if (!found ||
-                //     (disk_conflict < best_disk_conflict) ||
-                //     (disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
-                //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && residual > best_residual)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略15：
-                // // 策略 (D, P, R, I):
-                // // 1. disk_conflict 越小越好
-                // // 2. disk_tag_partition_count 越小越好
-                // // 3. residual 越大越好
-                // // 4. inner_conflict 越大越好
-                // if (!found ||
-                //     (disk_conflict < best_disk_conflict) ||
-                //     (disk_conflict == best_disk_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual > best_residual) ||
-                //     (disk_conflict == best_disk_conflict && disk_tag_partition_count == best_disk_tag_partition_count && residual == best_residual && inner_conflict > best_inner_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略16：
-                // // 策略 (D, R, P, I):
-                // // 1. disk_conflict 越小越好
-                // // 2. residual 越大越好
-                // // 3. disk_tag_partition_count 越小越好
-                // // 4. inner_conflict 越大越好
-                // if (!found ||
-                //     (disk_conflict < best_disk_conflict) ||
-                //     (disk_conflict == best_disk_conflict && residual > best_residual) ||
-                //     (disk_conflict == best_disk_conflict && residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_conflict == best_disk_conflict && residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略17：
-                // // 策略 (P, I, R, D):
-                // // 1. disk_tag_partition_count 越小越好
-                // // 2. inner_conflict 越大越好
-                // // 3. residual 越大越好
-                // // 4. disk_conflict 越小越好
-                // if (!found ||
-                //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && residual > best_residual) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && residual == best_residual && disk_conflict < best_disk_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略18：
-                // // 策略 (P, D, I, R):
-                // // 1. disk_tag_partition_count 越小越好
-                // // 2. disk_conflict 越小越好
-                // // 3. inner_conflict 越大越好
-                // // 4. residual 越大越好
-                // if (!found ||
-                //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && residual > best_residual)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略19：
-                // // 策略 (P, D, R, I):
-                // // 1. disk_tag_partition_count 越小越好
-                // // 2. disk_conflict 越小越好
-                // // 3. residual 越大越好
-                // // 4. inner_conflict 越大越好
-                // if (!found ||
-                //     (disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && residual > best_residual) ||
-                //     (disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && residual == best_residual && inner_conflict > best_inner_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略20：
-                // // 策略 (R, I, P, D):
-                // // 1. residual 越大越好
-                // // 2. inner_conflict 越大越好
-                // // 3. disk_tag_partition_count 越小越好
-                // // 4. disk_conflict 越小越好
-                // if (!found ||
-                //     (residual > best_residual) ||
-                //     (residual == best_residual && inner_conflict > best_inner_conflict) ||
-                //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (residual == best_residual && inner_conflict == best_inner_conflict && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略21：
-                // // 策略 (R, D, I, P):
-                // // 1. residual 越大越好
-                // // 2. disk_conflict 越小越好
-                // // 3. inner_conflict 越大越好
-                // // 4. disk_tag_partition_count 越小越好
-                // if (!found ||
-                //     (residual > best_residual) ||
-                //     (residual == best_residual && disk_conflict < best_disk_conflict) ||
-                //     (residual == best_residual && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict) ||
-                //     (residual == best_residual && disk_conflict == best_disk_conflict && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略22：
-                // // 策略 (R, P, D, I):
-                // // 1. residual 越大越好
-                // // 2. disk_tag_partition_count 越小越好
-                // // 3. disk_conflict 越小越好
-                // // 4. inner_conflict 越大越好
-                // if (!found ||
-                //     (residual > best_residual) ||
-                //     (residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict < best_disk_conflict) ||
-                //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && disk_conflict == best_disk_conflict && inner_conflict > best_inner_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略23：
-                // // 策略 (D, R, I, P):
-                // // 1. disk_conflict 越小越好
-                // // 2. residual 越大越好
-                // // 3. inner_conflict 越大越好
-                // // 4. disk_tag_partition_count 越小越好
-                // if (!found ||
-                //     (disk_conflict < best_disk_conflict) ||
-                //     (disk_conflict == best_disk_conflict && residual > best_residual) ||
-                //     (disk_conflict == best_disk_conflict && residual == best_residual && inner_conflict > best_inner_conflict) ||
-                //     (disk_conflict == best_disk_conflict && residual == best_residual && inner_conflict == best_inner_conflict && disk_tag_partition_count < best_disk_tag_partition_count)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // // 为标签选择新区间块的策略24：
-                // // 为标签选择新区间块的策略24：
-                // // 策略 (R, P, I, D):
-                // // 1. residual 越大越好
-                // // 2. disk_tag_partition_count 越小越好
-                // // 3. inner_conflict 越大越好
-                // // 4. disk_conflict 越小越好
-                // if (!found ||
-                //     (residual > best_residual) ||
-                //     (residual == best_residual && disk_tag_partition_count < best_disk_tag_partition_count) ||
-                //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict > best_inner_conflict) ||
-                //     (residual == best_residual && disk_tag_partition_count == best_disk_tag_partition_count && inner_conflict == best_inner_conflict && disk_conflict < best_disk_conflict)
-                // ) {
-                //     best_partition = candidate;
-                //     best_inner_conflict = inner_conflict;
-                //     best_disk_conflict = disk_conflict;
-                //     best_disk_tag_partition_count = disk_tag_partition_count;
-                //     best_residual = residual;
-                //     found = true;
-                // }
-
-                // // 为标签选择新区间块的策略25：
-                // // double score = -w1 * norm_count - w2 * norm_disk_conflict + w3 * norm_inner_conflict + w4 * norm_residual;
-                // // 设置权重（可根据实际情况调优）
-                // double w1 = 0.5; // 权重1：对硬盘已分配区间块数量的惩罚（越小越好）
-                // double w2 = 0.1; // 权重2：对整盘冲突值的惩罚（越小越好）
-                // double w3 = 0.1; // 权重3：对区间内部冲突值的奖励（越大越好）
-                // double w4 = 0.5; // 权重4：对剩余容量的奖励（越大越好）
-                // double norm_count = static_cast<double>(disk_tag_partition_count) / max_count;
-                // double norm_inner_conflict = static_cast<double>(inner_conflict) / max_inner_conflict;
-                // double norm_disk_conflict = static_cast<double>(disk_conflict) / max_disk_conflict;
-                // double norm_residual = static_cast<double>(residual) / max_residual;
-                // double score = -w1 * norm_count - w2 * norm_disk_conflict + w3 * norm_inner_conflict + w4 * norm_residual;
-                // if (!found ||
-                //     (score > best_score)
-                // ) {
-                //     best_partition = candidate;
-                //     best_score = score;
-                //     found = true;
-                // }
             }
-
             // 找到了合适的区间块，更新所有信息
             if (found) {
                 int disk_id = best_partition.first;                 // 硬盘ID
@@ -820,62 +965,89 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                 if (to_set) { 
                     to_set->insert(best_partition);                 // 加入新的集合（用于后续状态转移）
                 }
+                // break; // 只选择一个满足条件的最优区间块
             }
         };
 
-    // ========== Step 1：优先使用已有分配给该标签的区间块 ==========
-    for (const auto& [disk_id, parts] : tag_manager.tag_disk_partition[tag_id]) {
-        for (int part_id : parts) {
-            // 该硬盘未被选过，该硬盘该区间块有该标签，该区间块容量满足要求
-            if (!used_disks.count(disk_id) &&                                                   
-                tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id) &&    
-                disks[disk_id].get_residual_capacity(part_id) >= size) {
+    // // ========== Step 1：优先使用已有分配给该标签的区间块 ==========
+    // if (!current_is_read) {
+    //     for (const auto& [disk_id, parts] : tag_manager.tag_disk_partition[tag_id]) {
+    //         for (int part_id : parts) {
+    //             int head_position = disks[disk_id].get_head_position();
+    //             int head_part_id = disks[disk_id].get_partition_id(head_position);
+    //             // 该硬盘未被选过，该硬盘该区间块有该标签，该区间块容量满足要求
+    //             if (!used_disks.count(disk_id) &&                                                   
+    //                 tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id) &&    
+    //                 disks[disk_id].get_residual_capacity(part_id) >= size) {
 
-                chosen_partitions.emplace_back(disk_id, part_id);
-                used_disks.insert(disk_id);
-                break;  // 该硬盘只能选择一个区间块，因此跳过后续区间块
+    //                 chosen_partitions.emplace_back(disk_id, part_id);
+    //                 used_disks.insert(disk_id);
+    //                 break;  // 该硬盘只能选择一个区间块，因此跳过后续区间块
+    //             }
+    //         }
+    //         if ((int)chosen_partitions.size() == REP_NUM) break;
+    //     }
+    // }
+ 
+    // ========== Step 1：优先使用已有分配给该标签的区间块 ==========
+    // 第一次遍历选磁头后面的区间块，第二次遍历选所有的区间块
+    for (int head_mode = 0; head_mode <= 1; head_mode++) {
+        if (head_mode == 0 && !current_is_read ) continue;
+        for (const auto& [disk_id, parts] : tag_manager.tag_disk_partition[tag_id]) {
+            for (int part_id : parts) {
+                int head_position = disks[disk_id].get_head_position();
+                int head_part_id = disks[disk_id].get_partition_id(head_position);
+                if (head_mode == 0) {
+                    if (part_id <= head_part_id) continue;
+                }
+                // 该硬盘未被选过，该硬盘该区间块有该标签，该区间块容量满足要求
+                if (!used_disks.count(disk_id) &&                                                   
+                    tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id) &&    
+                    disks[disk_id].get_residual_capacity(part_id) >= size) {
+
+                    chosen_partitions.emplace_back(disk_id, part_id);
+                    used_disks.insert(disk_id);
+                    break;  // 该硬盘只能选择一个区间块，因此跳过后续区间块
+                }
             }
+            if ((int)chosen_partitions.size() == REP_NUM) break;
         }
         if ((int)chosen_partitions.size() == REP_NUM) break;
     }
 
     // while ((int)chosen_partitions.size() < REP_NUM) {
+    //     try_allocate_from_tag_partitions(tag_manager.zero_tag_partitions, &tag_manager.one_tag_partitions, 0);
+    //     try_allocate_from_tag_partitions(tag_manager.one_tag_partitions, &tag_manager.two_tag_partitions, 1);
+    //     try_allocate_from_tag_partitions(tag_manager.two_tag_partitions, &tag_manager.three_tag_partitions, 2);
+    //     try_allocate_from_tag_partitions(tag_manager.three_tag_partitions, &tag_manager.more_tag_partitions, 3); 
+    //     try_allocate_from_tag_partitions(tag_manager.more_tag_partitions, nullptr, 4); 
+    // }
+
     // ========== Step 2：选择 0 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.zero_tag_partitions, &tag_manager.one_tag_partitions, 0);
     }
-        // try_allocate_from_tag_partitions(tag_manager.zero_tag_partitions, &tag_manager.one_tag_partitions, 0);
-
     // ========== Step 3：选择 1 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.one_tag_partitions, &tag_manager.two_tag_partitions, 1);
     }
-        // try_allocate_from_tag_partitions(tag_manager.one_tag_partitions, &tag_manager.two_tag_partitions, 1);
-
     // ========== Step 4：选择 2 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.two_tag_partitions, &tag_manager.three_tag_partitions, 2);
     }
-        // try_allocate_from_tag_partitions(tag_manager.two_tag_partitions, &tag_manager.three_tag_partitions, 2);
-        
-
     // ========== Step 5：选择 3 标签区间块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.three_tag_partitions, &tag_manager.more_tag_partitions, 3); 
     }
-        // try_allocate_from_tag_partitions(tag_manager.three_tag_partitions, &tag_manager.more_tag_partitions, 3); 
-
     // ========== Step 6（兜底）：遍历所有区间块，强行挑选满足条件的块 ==========
     // 遍历 还需区间块数量 的次数，但每次遍历不一定有效
     for (int i = chosen_partitions.size() + 1; i <= REP_NUM; i++) {
         try_allocate_from_tag_partitions(tag_manager.more_tag_partitions, nullptr, 4); 
     }
-        // try_allocate_from_tag_partitions(tag_manager.more_tag_partitions, nullptr, 4); 
-    // }
 
     // ========== 最终校验：必须分配到了三个副本 ==========
     assert(chosen_partitions.size() == REP_NUM && "Partition selection failed. Not enough valid partitions found.");
@@ -917,4 +1089,12 @@ void Object::reduce_request(){
 
 int Object::get_request_num() const {
     return request_num;
+}
+
+bool Object::get_current_is_read() {
+    return current_is_read;
+}
+
+void Object::set_current_is_read(bool is_read) {
+    current_is_read = is_read; 
 }

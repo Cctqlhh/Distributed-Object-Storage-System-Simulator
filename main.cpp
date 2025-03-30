@@ -9,6 +9,7 @@ std::vector<std::vector<int>> conflict_matrix; // 冲突矩阵
 std::vector<int> tag_conflict_sum; // 从 1 到 M，有 M 行
 TagManager tagmanager(0, 0, 0);
 std::vector<std::vector<int>> write_conflict_matrix; // 写冲突矩阵
+std::vector<std::vector<int>> read_matrix; // 读取矩阵
 
 int current_max_request_id = 0; // 记录目前已处理的最大请求id
 
@@ -25,10 +26,11 @@ void preprocess() {
     std::vector<std::vector<int>> fre_write(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> fre_read(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> sum(M + 1, std::vector<int>(slicing_count + 1, 0)); // 对象累积总大小
-    std::vector<std::vector<int>> read_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 读取矩阵
+    // std::vector<std::vector<int>> read_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 读取矩阵
     conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 冲突矩阵
     write_conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 写冲突矩阵
     tag_conflict_sum.resize(M + 1, 0); // 标签冲突数
+    read_matrix.resize(M + 1, std::vector<int>(slicing_count + 1, 0)); // 读取矩阵
 
     // fre_del
     for (int i = 1; i <= M; i++)
@@ -242,6 +244,11 @@ void write_action(int t)
         // 创建对象并存入对象数组
         objects[id] = Object(id, size, tag);
         
+        // // 判断该对象的标签是否会在当前时间片组内被读取
+        // if (read_matrix[tag][(t - 1)/FRE_PER_SLICING + 1] >= 1) {
+        //     objects[id].set_current_is_read(true);
+        // }
+
         // 计算出对象所需的位于三个不同硬盘的三个区间块
         std::vector<std::pair<int, int>> chosen_partitions; // 存储 {硬盘ID, 区间块ID}
         chosen_partitions = objects[id].select_storage_partitions(tagmanager, disks, conflict_matrix);

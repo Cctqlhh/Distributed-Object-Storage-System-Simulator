@@ -45,6 +45,8 @@ extern TagManager tagmanager;
 extern std::vector<std::vector<int>> conflict_matrix;       // 冲突矩阵
 extern std::vector<int> tag_conflict_sum;                   // 从 1 到 M，有 M 行
 extern std::vector<std::vector<int>> write_conflict_matrix; // 写冲突矩阵
+extern std::vector<std::vector<int>> read_matrix;           // 读取矩阵
+
 
 #include "object.h"
 #include "request.h"

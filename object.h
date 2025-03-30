@@ -23,6 +23,7 @@ private:
     int request_num;
     std::vector<int> active_requests;           // 存储当前对象正在处理的请求id
     std::vector<bool> is_continue;              // 对象的连续性标记 1~3
+    bool current_is_read;                          // 对象在当前时间片组是否可能会被读取
 
 public:
     Object(int id = 0, int size = 0, int tag_id = 0);
@@ -77,5 +78,9 @@ public:
                                                                 std::vector<Disk>& disks,
                                                                 const std::vector<std::vector<int>>& conflict_matrix);
     std::vector<std::pair<int, int>> get_chosen_partitions() const;
+
+    bool get_current_is_read();
+
+    void set_current_is_read(bool is_read);
 
 };

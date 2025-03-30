@@ -7,16 +7,7 @@ TagManager::TagManager(int M, int N, int slicing_count)
     disk_tag_kind(N + 1),                  // 记录每个硬盘上的标签
     disk_tag_partition_num(N + 1),    // 记录每个硬盘上的标签及其区间块数量
     tag_disk_partition(M + 1)     // 记录每个标签分配的所有硬盘id和区间块id
-    {}
-
-void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vector<std::vector<int>>& conflict_matrix, std::vector<Disk>& disks) {
-    // 初始化局部变量
-    std::vector<int> tag_required_blocks(M + 1, 0);                     // 每个标签需要的初始划分区间块数量
-    std::vector<int> disk_remaining_partitions(N + 1, DISK_PARTITIONS); // 每个硬盘剩余区间块
-    std::vector<bool> disk_used(N + 1, false);                          // 记录硬盘是否已被占用
-    std::set<int> selected_disks;                             // 记录标签已选择的硬盘，最多3个
-    std::vector<int> disk_first_empty_partition(N + 1, 1);              // 记录每个硬盘第一个为空的区间块id
-
+    {
     // 清空属性
     for (auto& inner_vec : disk_partition_usage_tagkind) {
         for (auto& s : inner_vec) {
@@ -54,6 +45,53 @@ void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vecto
             zero_tag_partitions.insert({disk_id, block});
         }
     }
+}
+
+void TagManager::init(const std::vector<std::vector<int>>& sum, const std::vector<std::vector<int>>& conflict_matrix, std::vector<Disk>& disks) {
+    // 初始化局部变量
+    std::vector<int> tag_required_blocks(M + 1, 0);                     // 每个标签需要的初始划分区间块数量
+    std::vector<int> disk_remaining_partitions(N + 1, DISK_PARTITIONS); // 每个硬盘剩余区间块
+    std::vector<bool> disk_used(N + 1, false);                          // 记录硬盘是否已被占用
+    std::set<int> selected_disks;                             // 记录标签已选择的硬盘，最多3个
+    std::vector<int> disk_first_empty_partition(N + 1, 1);              // 记录每个硬盘第一个为空的区间块id
+
+    // // 清空属性
+    // for (auto& inner_vec : disk_partition_usage_tagkind) {
+    //     for (auto& s : inner_vec) {
+    //         s.clear();
+    //     }
+    // }
+    // for (auto& matrix : disk_partition_usage_tagnum) { // 已经初始化完毕，不需要再清空
+    //     for (auto& vec : matrix) {
+    //         std::fill(vec.begin(), vec.end(), 0);
+    //     }
+    // }
+    // for (auto& s : disk_tag_kind) s.clear();                // 清空硬盘上的标签数量
+    // // 下面两个效果相同：对于 int 来说默认就是 0，因此，两种方法在后续访问时都能确保未存在的键对应的值是 0
+    // // for (auto& m : disk_tag_partition_num) m.clear();       // 清空硬盘上的标签及其区间块数量
+    // for (int disk_id = 1; disk_id <= N; disk_id++) {
+    //     for (int tag = 1; tag <= M; tag++) {
+    //         disk_tag_partition_num[disk_id][tag] = 0;
+    //     }
+    // }
+    // // for (auto& n : tag_disk_partition) n.clear();           // 清空标签分配的所有硬盘id和区间块id
+    // for (int tag = 1; tag <= M; ++tag) {
+    //     for (auto& pair : tag_disk_partition[tag]) {
+    //         pair.second.clear();
+    //     }
+    // }
+    // zero_tag_partitions.clear();
+    // one_tag_partitions.clear();
+    // two_tag_partitions.clear();
+    // three_tag_partitions.clear();
+    // more_tag_partitions.clear();
+
+    // // 因为一开始所有区间块含有的标签数量为0，所以将所有区间块添加到 zero_tag
+    // for (int disk_id = 1; disk_id <= N; ++disk_id) {
+    //     for (int block = 1; block <= DISK_PARTITIONS; ++block) {
+    //         zero_tag_partitions.insert({disk_id, block});
+    //     }
+    // }
 
     // ========== Lambda：更新变量，维护属性 ==========
     // disk_id: 硬盘id，tag: 标签id

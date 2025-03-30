@@ -83,7 +83,8 @@ void preprocess() {
     // 计算读取矩阵（根据热度阈值）
     for (int i = 1; i <= M; i++) {
         for (int j = 1; j <= slicing_count; j++) {
-            read_matrix[i][j] = (fre_read[i][j] >= HEAT_THRESHOLD) ? 1 : 0;
+            // read_matrix[i][j] = (fre_read[i][j] >= HEAT_THRESHOLD) ? 1 : 0;
+            read_matrix[i][j] = static_cast<int>(std::ceil(static_cast<double>(fre_read[i][j]) / HEAT_THRESHOLD));  
         }
     }
 
@@ -245,7 +246,7 @@ void write_action(int t)
         objects[id] = Object(id, size, tag);
         
         // // 判断该对象的标签是否会在当前时间片组内被读取
-        // if (read_matrix[tag][(t - 1)/FRE_PER_SLICING + 1] >= 1) {
+        // if (read_matrix[tag][(t - 1)/FRE_PER_SLICING + 1] >= 10) {
         //     objects[id].set_current_is_read(true);
         // }
 

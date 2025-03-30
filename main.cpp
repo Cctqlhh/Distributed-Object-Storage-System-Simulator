@@ -337,10 +337,11 @@ void read_action(int t)
         // 维护已有请求 应当磁头空闲时候进行维护
         
         int head = disks[i].get_head_position();
-        if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
+        if(disks[i].head_is_free() && t != disks[i].curr_time){ //磁头空闲，需要设置新的读取对象
             // std::cerr<<"----------------------------------------------"<<std::endl;
             // std::cerr<<"disk "<<i<<" head is free"<<std::endl;
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
+            disks[i].curr_time = t;
             bool has_request = false;
             // // 遍历硬盘所有分区对应的所有对象 请求
             // // 遍历硬盘有请求的分区
@@ -395,6 +396,9 @@ void read_action(int t)
             // 若有请求需要处理
             disks[i].set_head_busy();
         }
+        else if(disks[i].head_is_free()){
+            disks[i].set_head_busy();
+        }
         // 磁头忙（设置好了要读取的对象）进行读取操作
         // int head = disks[i].get_head_position();
         // auto part_p = disks[i].get_top_partition();
@@ -409,6 +413,7 @@ void read_action(int t)
                 // std::cerr<<"-------------------------------------------"<<std::endl;
                 disks[i].last_ok = true;
                 disks[i].set_head_free();
+                printf("#\n"); // 当前硬盘无请求，不操作
                 i++;
                 continue;
             }

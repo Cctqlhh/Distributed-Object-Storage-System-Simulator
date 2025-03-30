@@ -181,9 +181,9 @@ private:
 
 public:
     const PartitionInfo* part_p;  // 当前操作的区间块指针
-    
+    int curr_time;
     bool last_ok;
-    Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0) {}  // 添加默认构造函数
+    Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0), curr_time(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
 
 

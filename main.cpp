@@ -335,6 +335,8 @@ void read_action(int t)
     for(int i=1; i<=N;){
         assert(i <= N && i >= 1);
         // 维护已有请求 应当磁头空闲时候进行维护
+        
+        int head = disks[i].get_head_position();
         if(disks[i].head_is_free()){ //磁头空闲，需要设置新的读取对象
             // std::cerr<<"----------------------------------------------"<<std::endl;
             // std::cerr<<"disk "<<i<<" head is free"<<std::endl;
@@ -345,6 +347,7 @@ void read_action(int t)
             // // 每个分区的有请求的对象
             const std::vector<int>& storage_ = disks[i].get_storage(); // 获取硬盘存储单元
             for(int partition_id = 1; partition_id <= DISK_PARTITIONS; ++partition_id){
+                disks[i].update_partition_head(partition_id, head); // 更新分区的磁头位置
                 // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
                 int start = disks[i].get_partition_start(partition_id);
                 int size = disks[i].get_partition_size(partition_id);
@@ -358,12 +361,15 @@ void read_action(int t)
 
                 double score = 0;
                 // 遍历分区的所有存储单元  // 后续替换为直接遍历分区的所有对象
-                for(int idx=0; idx < size; ++idx){
+                // for(int idx=0; idx < size; ++idx){
+                for(const auto & object_id : disks[i].get_partition_info(partition_id).partition_object){
+                    // if(object_id == 0) continue; // 目标不存在，则跳过
+                    // 目标存在，获取request信息
                     // if(idx > 0 && subStorage[idx-1] == subStorage[idx]) continue; // 跳过连续相同的存储单元(对象)
-                    int object_id = subStorage[idx];
-                    if(object_id == 0) continue; // 目标不存在，则跳过
+                    // int object_id = subStorage[idx];
+                    // if(object_id == 0) continue; // 目标不存在，则跳过
                      // 假设连续存储的,获取size之后用来跳过(后续调整为直接遍历分区的所有对象,不需要考虑size)
-                    idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
+                    // idx += objects[object_id].get_size() - 1; // 跳过连续相同的存储单元(对象)
 
                     // 目标存在，获取request信息 
                     auto& active_reqs = objects[object_id].get_active_requests(); // 获取对象的活跃请求列表
@@ -390,7 +396,7 @@ void read_action(int t)
             disks[i].set_head_busy();
         }
         // 磁头忙（设置好了要读取的对象）进行读取操作
-        int head = disks[i].get_head_position();
+        // int head = disks[i].get_head_position();
         // auto part_p = disks[i].get_top_partition();
         const PartitionInfo* part_p;
         if(!disks[i].last_ok) { // 上次未读取完

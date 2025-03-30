@@ -30,10 +30,10 @@ class TagManager;
 #define EXTRA_TIME (105)
 #define REP_NUM 3
 #define HEAT_THRESHOLD 5000                // 设定热度阈值
-#define PARTITION_ALLOCATION_THRESHOLD 20   // 选取第20个时间片组进行分配
-#define SCALE 0.3                           // 选择初始存储需求的比例因子
-#define DISK_PARTITIONS 20                  // 定义硬盘分区数
-#define MAX_PARTITIONS_PER_TAG 4            // 同一个标签在一个磁盘上的最多区间块数
+#define PARTITION_ALLOCATION_THRESHOLD 20   // 选取第20个时间片组进行分配   20
+#define SCALE 0.3                           // 选择初始存储需求的比例因子   0.3
+#define DISK_PARTITIONS 20                  // 定义硬盘分区数   
+#define MAX_PARTITIONS_PER_TAG 4            // 同一个标签在一个磁盘上的最多区间块数 4
 #define WRITE_THRESHOLD 100                 // 设定写数据阈值
 
 

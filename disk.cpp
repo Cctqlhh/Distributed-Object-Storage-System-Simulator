@@ -194,6 +194,11 @@ void Disk::reflash_partition_score(){
     }
     initialize_partitions();
 }
+
+void Disk::update_partition_head(int part_id, int head){
+    partitions[part_id].head_position = head;
+}
+
 void Disk::update_partition_info(int partition_id, double score){
     // if (partition_id <= 0 || partition_id > partitions.size() - 1 || score <= 0) return;
     partitions[partition_id].score = score;

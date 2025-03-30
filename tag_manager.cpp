@@ -1,7 +1,7 @@
 #include "tag_manager.h"
 
 TagManager::TagManager(int M, int N, int slicing_count)
-    : tag_delete_prob(M + 1, std::vector<double>(REP_NUM, 0.0f)), 
+    : tag_delete_prob(M + 1, std::vector<double>(slicing_count, 0.0f)), 
     disk_partition_usage_tagnum(N + 1, std::vector<std::vector<int>>(DISK_PARTITIONS + 1, std::vector<int>(M + 1, 0))), // 支持多个标签共存
     disk_partition_usage_tagkind(N + 1, std::vector<std::set<int>>(DISK_PARTITIONS + 1)),                   // 记录每个硬盘上的区间块已分配的标签种类数
     disk_tag_kind(N + 1),                  // 记录每个硬盘上的标签

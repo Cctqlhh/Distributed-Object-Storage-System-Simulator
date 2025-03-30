@@ -350,12 +350,13 @@ void read_action(int t)
                 int size = disks[i].get_partition_size(partition_id);
                 const int* subStorage = storage_.data() + start; // 获取分区的存储单元
                 
-                int t0 = t;
+                double t0 = t;
                 // int dis = disks[i].get_distance_to_head(start); // 计算距离
                 // if (disks[i].get_cur_tokens() == G && dis > G - 64) t0 += 1;
                 // else if (disks[i].get_cur_tokens() < G && dis > disks[i].get_cur_tokens() - 64) t0 += 2;
+                // t0 += disks[i].get_distance_to_head(start) / 105; // 计算距离
 
-                float score = 0;
+                double score = 0;
                 // 遍历分区的所有存储单元  // 后续替换为直接遍历分区的所有对象
                 for(int idx=0; idx < size; ++idx){
                     // if(idx > 0 && subStorage[idx-1] == subStorage[idx]) continue; // 跳过连续相同的存储单元(对象)

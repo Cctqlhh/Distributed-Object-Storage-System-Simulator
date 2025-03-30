@@ -6,7 +6,7 @@
 struct PartitionInfo {
     int start;  // 该区间块的起始位置（存储单元索引）
     int size;   // 该区间块的大小
-    float score;  // 该区间块的优先级得分
+    double score;  // 该区间块的优先级得分
     size_t heap_index; // 该区间块在堆中的索引
     PartitionInfo* next;  // 指向下一个区间块的指针
     // std::vector<int> need_read;  // 该区间块的每个存储单元是否需要读，需要读取的次数
@@ -233,7 +233,7 @@ public:
     void increase_residual_capacity(int partition_id, int size); // 增加区间块的剩余容量
     void reflash_partition_score();
     // int update_partition_info(int partition_id, const Request & req);
-    void update_partition_info(int partition_id, float score);
+    void update_partition_info(int partition_id, double score);
     
     bool head_is_free() const{
         return head_free;

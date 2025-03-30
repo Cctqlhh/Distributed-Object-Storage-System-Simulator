@@ -33,7 +33,7 @@ public:
     double get_size_score() const;
     double get_time_score() const;
     double get_delete_prob(int t) const;
-    double get_score(int t) const;
+    double get_score(double t) const;
     
     void set_is_done_list(int block_idx);
 };

@@ -40,10 +40,12 @@ void Request::set_object_id(int id) {
 }
 
 double Request::compute_time_score_update(int t) const {
-    if(is_done || is_up) return 0.0f;
-    int time_ = t - timestamp;
+    // if(is_done || is_up) return 0.0f;
+    unsigned int time_ = t - timestamp;
     return (time_ <= 10) ? (1.0 - 0.005 * time_) : 
            (time_ <= 105) ? (1.05 - 0.01 * time_) : 0.0;
+    // return (time_ <= 105)? (1 + time_) : 0.0;
+    // return (time_ <= 105)? (1 + time_) : 0.0;
 }
 
 double Request::get_size_score() const{
@@ -55,12 +57,15 @@ double Request::get_time_score() const{
 double Request::get_delete_prob(int t) const{
     return tagmanager.tag_delete_prob[objects[object_id].get_tag_id()][(t - 1) / FRE_PER_SLICING + 1];
 }
-double Request::get_score(int t) const{
-    // double score = compute_time_score_update(t);
+
+double Request::get_score(double t) const{
+    double score = compute_time_score_update(t);
     // return score * size_score * (1 - get_delete_prob(t));
-    // double score = t > time_score + 105 ? 0.0 : (1.0 - (t - time_score) / 105.0);
-    // return score * size_score;
-    return time_score * size_score;
+    // double score = t > timestamp + 105 ? 0.0 : (1.0 - (t - timestamp) / 105.0);
+    // double score = t > timestamp + 105? 0.0 : (t - timestamp + 1);
+    double time_over = t - timestamp <= 105 ? (t - timestamp) : 0.0;
+    return (0.3 * score + 0.7 * time_over / 105) * size_score / 5;
+    // return time_score * size_score;
 
     // 1. 计算时间得分（double 精度）
     // 2. 计算对象大小得分

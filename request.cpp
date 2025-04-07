@@ -65,30 +65,30 @@ double Request::get_score(double t) const{
     // double score = t > timestamp + 105? 0.0 : (t - timestamp + 1);
     double time_over = t - timestamp <= 105 ? (t - timestamp) : 0.0;
     return (0.3 * score + 0.7 * time_over / 105) * size_score / 5;
-    // return time_score * size_score;
+    // // return time_score * size_score;
 
-    // 1. 计算时间得分（double 精度）
-    // 2. 计算对象大小得分
-    double time_size_score = compute_time_score_update(t) * size_score;
-    // return time_size_score;
-    // 3. 计算不被删除的概率，添加极小值保护（避免 log(0) 或 0 乘积）
-    double not_del = std::max(1e-9, 1.0 - get_delete_prob(t));
+    // // 1. 计算时间得分（double 精度）
+    // // 2. 计算对象大小得分
+    // double time_size_score = compute_time_score_update(t) * size_score;
+    // // return time_size_score;
+    // // 3. 计算不被删除的概率，添加极小值保护（避免 log(0) 或 0 乘积）
+    // double not_del = std::max(1e-9, 1.0 - get_delete_prob(t));
 
-    // 设置各项权重，可根据实际调试调整（初始均设为 1.0）
-    double weight_time = 1.0;
-    double weight_size = 1.0;
-    double weight_del  = 1.0;
-    // // 使用加权乘积计算最终得分
-    // double final_score = std::pow(time_score, weight_time) *
-    //                      std::pow(size_score, weight_size) *
-    //                      std::pow(not_del,  weight_del);
-    // 如果你担心直接乘可能出现过小数值，也可以选择取对数后加权再指数化：
-    double log_score = weight_time * std::log(std::max(time_score, 1e-9)) +
-                       weight_size * std::log(std::max(size_score, 1e-9)) +
-                       weight_del  * std::log(not_del);
-    double final_score = std::exp(log_score);
+    // // 设置各项权重，可根据实际调试调整（初始均设为 1.0）
+    // double weight_time = 1.0;
+    // double weight_size = 1.0;
+    // double weight_del  = 1.0;
+    // // // 使用加权乘积计算最终得分
+    // // double final_score = std::pow(time_score, weight_time) *
+    // //                      std::pow(size_score, weight_size) *
+    // //                      std::pow(not_del,  weight_del);
+    // // 如果你担心直接乘可能出现过小数值，也可以选择取对数后加权再指数化：
+    // double log_score = weight_time * std::log(std::max(time_score, 1e-9)) +
+    //                    weight_size * std::log(std::max(size_score, 1e-9)) +
+    //                    weight_del  * std::log(not_del);
+    // double final_score = std::exp(log_score);
 
-    return final_score;
+    // return final_score;
 
 }
 

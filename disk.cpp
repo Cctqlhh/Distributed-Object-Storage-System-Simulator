@@ -4,14 +4,19 @@
 Disk::Disk(int disk_id, int disk_capacity, int max_tokens) 
     : id(disk_id)
     , capacity(disk_capacity)
-    , head_position(1)
+    // , head_position(1)
+    , head_position(HEAD_NUM + 1, 1)
     , storage(disk_capacity + 1, 0)
     , max_tokens_(max_tokens) 
     , partition_size(std::ceil(static_cast<double>(disk_capacity) / DISK_PARTITIONS))
     , token_manager(max_tokens)
-    , head_free(true)
-    , part_p(nullptr)
-    , last_ok(true) {
+    // , head_free(true)
+    , head_free(HEAD_NUM + 1, true)
+    // , part_p(nullptr)
+    , part_p(HEAD_NUM + 1, nullptr)
+    // , last_ok(true) 
+    , last_ok(HEAD_NUM + 1, true)
+    {
     // 初始化每个存储单元的分区信息
     storage_partition_map.resize(disk_capacity + 1);        // 存储单元编号从 1 到 disk_capacity
     partitions.resize(DISK_PARTITIONS + 1);                 // 分区编号从 1 到 20
@@ -85,11 +90,11 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
 // }
 
 
-std::pair<int,int> Disk::get_need_token_to_head(int position) const {
+std::pair<int,int> Disk::get_need_token_to_head(int position, int i) const {
     assert(position > 0 && position <= capacity);
     // int distance = get_distance_to_head(position);
-    int read_cost = get_need_token_continue_read(position);
-    int pass_cost = get_need_token_continue_pass(position);
+    int read_cost = get_need_token_continue_read(position, i);
+    int pass_cost = get_need_token_continue_pass(position, i);
     int cur_rest_tokens = token_manager.get_current_tokens();
     int cost;
     int action;
@@ -113,8 +118,8 @@ std::pair<int,int> Disk::get_need_token_to_head(int position) const {
     return {action, cost};
 }
 
-int Disk::get_need_token_continue_read(int position) const{
-    int distance = get_distance_to_head(position);
+int Disk::get_need_token_continue_read(int position, int i) const{
+    int distance = get_distance_to_head(position, i);
     // (1+(p2-p1))*readi
     int prev_read_cost_ = token_manager.get_prev_read_cost();
     int cost;
@@ -132,8 +137,8 @@ int Disk::get_need_token_continue_read(int position) const{
     return cost;
 }
 
-int Disk::get_need_token_continue_pass(int position) const{
-    int distance = get_distance_to_head(position);
+int Disk::get_need_token_continue_pass(int position, int i) const{
+    int distance = get_distance_to_head(position, i);
     int cost = distance + 64;
     return cost;
 }
@@ -142,28 +147,28 @@ void Disk::refresh_token_manager(){
     token_manager.refresh();
 }
 
-int Disk::jump(int position){
+int Disk::jump(int position, int i){
     if(token_manager.consume_jump()){
-        head_position = position;
-        return head_position;
+        head_position[i] = position;
+        return head_position[i];
     } else 
         return 0;
 }
-int Disk::pass(){
+int Disk::pass(int i){
     if(token_manager.consume_pass()){
-        head_position += 1;
-        if(head_position > capacity)
-            head_position = 1;
-        return head_position;
+        head_position[i] += 1;
+        if(head_position[i] > capacity)
+            head_position[i] = 1;
+        return head_position[i];
     }
     else return 0;
 }
-int Disk::read(){
+int Disk::read(int i){
     if(token_manager.consume_read()){
-        head_position += 1;
-        if(head_position > capacity)
-            head_position = 1;
-        return head_position;
+        head_position[i] += 1;
+        if(head_position[i] > capacity)
+            head_position[i] = 1;
+        return head_position[i];
     }
     else return 0;
 }
@@ -189,8 +194,11 @@ int Disk::read(){
 // }
 
 void Disk::reflash_partition_score(){
-    for (auto& partition : partitions) {
-        partition.score = 0.0f;
+    // for (auto& partition : partitions) {
+    //     partition.score = 0.0f;
+    // }
+    for(int i=1; i<=DISK_PARTITIONS; i++){
+        partitions[i].score = 0.0f;
     }
     initialize_partitions();
 }
@@ -263,7 +271,8 @@ const PartitionInfo* Disk::get_top_partition() {
 }
 
 // 新增方法：获取堆顶（score 最高）的分区信息
-const PartitionInfo* Disk::get_pop_partition() {
+// const PartitionInfo* Disk::get_pop_partition() {
+PartitionInfo* Disk::get_pop_partition() {
     return partition_heap.pop();
 }
 

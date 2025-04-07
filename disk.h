@@ -10,15 +10,16 @@ struct PartitionInfo {
     int head_position;  //
     size_t heap_index; // 该区间块在堆中的索引
     PartitionInfo* next;  // 指向下一个区间块的指针
+    bool is_free;
     // std::vector<int> need_read;  // 该区间块的每个存储单元是否需要读，需要读取的次数
     // std::vector<int> object_ids;    // 该区间块存储的所有对象id
     
     // 每个区间块的对象id
     std::vector<int> partition_object;
 
-    PartitionInfo() : start(0), size(0), score(0), head_position(1) {}  // 默认构造函数
+    PartitionInfo() : start(0), size(0), score(0), head_position(1), is_free(true) {}  // 默认构造函数
     // PartitionInfo(int s, int sz) : start(s), size(sz), score(0), need_read(sz, 0) {}  // 带参数的构造函数
-    PartitionInfo(int s, int sz) : start(s), size(sz), score(0), head_position(1) {}  // 带参数的构造函数
+    PartitionInfo(int s, int sz) : start(s), size(sz), score(0), head_position(1), is_free(true) {}  // 带参数的构造函数
     
     int get_distance_to_head(int position) const // 返回目标位置到磁头的距离（存储单元数（对象块数））== pass token消耗
     {
@@ -160,8 +161,12 @@ private:
     int capacity;
     // 在对象写入时更新
     std::vector<int> storage;  // 存储单元，值为对象id
-    int head_position;         // 磁头位置
-    bool head_free;          // 磁头状态
+
+    std::vector<int> head_position;
+    std::vector<bool> head_free;
+    // int head_position;         // 磁头位置
+    // bool head_free;          // 磁头状态
+    
     int max_tokens_;
     int partition_size;        // 每个分区的大小(一般)
 
@@ -180,10 +185,13 @@ private:
     std::vector<int> residual_capacity;     // 存储每个区间块的剩余容量，初始化为初始最大容量size
 
 public:
-    const PartitionInfo* part_p;  // 当前操作的区间块指针
-    int curr_time;
-    bool last_ok;
-    Disk() : id(0), capacity(0), head_position(1), max_tokens_(0), token_manager(0), curr_time(0) {}  // 添加默认构造函数
+    // const PartitionInfo* part_p;  // 当前操作的区间块指针
+    // std::vector<const PartitionInfo*> part_p;
+    std::vector<PartitionInfo*> part_p;
+    int curr_time; // 记录最后一次刷新分数的时间
+    std::vector<bool> last_ok;
+    // bool last_ok;
+    Disk() : id(0), capacity(0), head_position(HEAD_NUM+1, 1), max_tokens_(0), token_manager(0), curr_time(0) {}  // 添加默认构造函数
     Disk(int id, int capacity, int max_tokens);
 
 
@@ -194,8 +202,8 @@ public:
     void erase(int position){
         storage[position] = 0;
     }
-    int get_head_position() const{
-        return head_position;
+    int get_head_position(int i) const{
+        return head_position[i];
     }
     bool is_free(int position) const{
         return storage[position] == 0;
@@ -210,28 +218,31 @@ public:
         return storage;
     }
 
-    int get_distance_to_head(int position) const // 返回目标位置到磁头的距离（存储单元数（对象块数））== pass token消耗
+    int get_distance_to_head(int position, int i) const // 返回目标位置到磁头的距离（存储单元数（对象块数））== pass token消耗
     {
         assert(position > 0 && position <= capacity);
-        if(position < head_position)
-            return capacity - head_position + position;
-        else return position - head_position;
+        if(position < head_position[i])
+            return capacity - head_position[i] + position;
+        else return position - head_position[i];
     }
-    std::pair<int, int> get_need_token_to_head(int position) const; // 返回到达目标的最优操作和token消耗。1-pass,0-read,-1-jump,-2-next-jump.
+    std::pair<int, int> get_need_token_to_head(int position, int i) const; // 返回到达目标的最优操作和token消耗。1-pass,0-read,-1-jump,-2-next-jump.
 
-    int get_need_token_continue_read(int position) const; // 返回到达目标连续read时token消耗(包含到达后的读取)
-    int get_need_token_continue_pass(int position) const; // 返回到达目标连续pass时token消耗(包含到达后的读取)
+    int get_need_token_continue_read(int position, int i) const; // 返回到达目标连续read时token消耗(包含到达后的读取)
+    int get_need_token_continue_pass(int position, int i) const; // 返回到达目标连续pass时token消耗(包含到达后的读取)
     void refresh_token_manager();
 
     // head操作，更新head位置并返回，同时更新token
-    int jump(int position); 
-    int pass();
-    int read();
+    int jump(int position, int i); 
+    int pass(int i);
+    int read(int i);
     
     int get_partition_id(int position) const // 计算存储单元 `position` 所属的分区
     {
         assert(position > 0 && position <= capacity);
         return storage_partition_map[position];
+    }
+    bool get_partition_is_free(int partition_id) const{ // 检查区间块是否空闲
+        return partitions[partition_id].is_free;
     }
     int get_partition_size() const // 获取磁盘的 `partition_size`
     {
@@ -253,20 +264,21 @@ public:
     // int update_partition_info(int partition_id, const Request & req);
     void update_partition_info(int partition_id, double score);
     
-    bool head_is_free() const{
-        return head_free;
+    bool head_is_free(int i) const{
+        return head_free[i];
     }
-    void set_head_busy(){
-        head_free = false;
+    void set_head_busy(int i){
+        head_free[i] = false;
     }
-    void set_head_free(){
-        head_free = true;
+    void set_head_free(int i){
+        head_free[i] = true;
     }
     // 新增方法：初始化 partitions 和堆（例如在构造函数中调用）
     void initialize_partitions();
     // 获取堆顶（score 最高）的分区信息
     const PartitionInfo* get_top_partition();
-    const PartitionInfo* get_pop_partition();
+    // const PartitionInfo* get_pop_partition();
+    PartitionInfo* get_pop_partition();
     void push_partition(PartitionInfo* partition);
 
     int get_cur_tokens() const{

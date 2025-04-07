@@ -35,12 +35,13 @@ class TagManager;
 #define DISK_PARTITIONS 20                  // 定义硬盘分区数   
 #define MAX_PARTITIONS_PER_TAG 4            // 同一个标签在一个磁盘上的最多区间块数 4
 #define WRITE_THRESHOLD 100                 // 设定写数据阈值
+#define HEAD_NUM 2                          // 每个磁盘的磁头数量
 
 
 extern std::vector<Request> requests;
 extern std::vector<Object> objects;
 extern std::vector<Disk> disks;
-extern int T, M, N, V, G;
+extern int T, M, N, V, G, K;
 extern TagManager tagmanager;
 extern std::vector<std::vector<int>> conflict_matrix;       // 冲突矩阵
 extern std::vector<int> tag_conflict_sum;                   // 从 1 到 M，有 M 行

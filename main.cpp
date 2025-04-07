@@ -15,7 +15,7 @@ int current_max_request_id = 0; // 记录目前已处理的最大请求id
 
 void preprocess() {
     // T时间片，M标签个数，N磁盘个数，V磁盘容量，Gtoken数量
-    scanf("%d%d%d%d%d", &T, &M, &N, &V, &G);
+    scanf("%d%d%d%d%d%d", &T, &M, &N, &V, &G, &K);
     // 计算时间片组数
     int slicing_count = (T - 1) / FRE_PER_SLICING + 1;
     // 初始化全局 TagManager
@@ -333,11 +333,13 @@ void read_action(int t)
 
     // 每个磁头寻找要读的对象进行读操作  
     for(int i=1; i<=N;){
-        assert(i <= N && i >= 1);
+    for(int j=1; j<=HEAD_NUM;){
+
+        // assert(i <= N && i >= 1);
         // 维护已有请求 应当磁头空闲时候进行维护
         
-        int head = disks[i].get_head_position();
-        if(disks[i].head_is_free() && t != disks[i].curr_time){ //磁头空闲，需要设置新的读取对象
+        int head = disks[i].get_head_position(j);
+        if(disks[i].head_is_free(j) && t != disks[i].curr_time){ //磁头空闲，需要设置新的读取对象
             // std::cerr<<"----------------------------------------------"<<std::endl;
             // std::cerr<<"disk "<<i<<" head is free"<<std::endl;
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
@@ -348,6 +350,8 @@ void read_action(int t)
             // // 每个分区的有请求的对象
             const std::vector<int>& storage_ = disks[i].get_storage(); // 获取硬盘存储单元
             for(int partition_id = 1; partition_id <= DISK_PARTITIONS; ++partition_id){
+                if(!disks[i].get_partition_is_free(partition_id)) continue; // 跳过busy分区
+
                 disks[i].update_partition_head(partition_id, head); // 更新分区的磁头位置
                 // if(disks[i].partitions[partition_id].score <= 0) continue; // 跳过分数为0的分区
                 int start = disks[i].get_partition_start(partition_id);
@@ -374,10 +378,9 @@ void read_action(int t)
 
                     // 目标存在，获取request信息 
                     auto& active_reqs = objects[object_id].get_active_requests(); // 获取对象的活跃请求列表
-                    for(size_t i=0; i<active_reqs.size(); ++i){ 
-                        auto & req = requests[active_reqs[i]];
+                    for(size_t k=0; k<active_reqs.size(); ++k){ 
+                        auto & req = requests[active_reqs[k]];
                         if(req.is_up || req.is_completed()){ // 跳过已经完成的请求
-                            // ++i;
                             continue;
                         }
                         score += req.get_score(t0);
@@ -389,35 +392,43 @@ void read_action(int t)
             }
             if(!has_request) {
                 // std::cerr << "disk " << i << " head not has request" << std::endl;
-                printf("#\n"); // 当前硬盘无请求，不操作
+                for(;j<=HEAD_NUM;++j){
+                    printf("#\n"); // 当前硬盘无请求，不操作
+                }
                 i++;
-                continue; // 下一个硬盘
+                // continue; // 下一个硬盘
+                break;
             }
             // 若有请求需要处理
-            disks[i].set_head_busy();
+            disks[i].set_head_busy(j);
         }
-        else if(disks[i].head_is_free()){
-            disks[i].set_head_busy();
+        else if(disks[i].head_is_free(j)){
+            disks[i].set_head_busy(j);
         }
         // 磁头忙（设置好了要读取的对象）进行读取操作
         // int head = disks[i].get_head_position();
         // auto part_p = disks[i].get_top_partition();
-        const PartitionInfo* part_p;
-        if(!disks[i].last_ok) { // 上次未读取完
+        // const PartitionInfo* part_p;
+        PartitionInfo* part_p;
+        if(!disks[i].last_ok[j]) { // 上次未读取完
             // std::cerr << "last not ok" << std::endl;
-            part_p = disks[i].part_p; // 继续上次区间
+            part_p = disks[i].part_p[j]; // 继续上次区间
         }else{ // 上次读完了
             part_p = disks[i].get_pop_partition(); // 获取最高分区
             // 优化：如果最高分区分数为0，直接处理下一个磁盘
             if(part_p->score <= 0){
                 // std::cerr<<"-------------------------------------------"<<std::endl;
-                disks[i].last_ok = true;
-                disks[i].set_head_free();
-                printf("#\n"); // 当前硬盘无请求，不操作
+                for(;j <= HEAD_NUM; ++j){
+                    disks[i].last_ok[j] = true;
+                    disks[i].set_head_free(j);
+                    printf("#\n"); // 当前硬盘无请求，不操作
+                }
                 i++;
-                continue;
+                // continue;
+                break;
             }
-            disks[i].part_p = part_p; // 更新当前分区
+            disks[i].part_p[j] = part_p; // 更新当前分区
+            part_p->is_free = false; // 标记分区为忙
             // if(part_p == disks[i].part_p){ // 还是原来分区
             //     assert(disks[i].part_p);
             //     auto second_part_p = disks[i].get_pop_partition(); // 获取第二高分区
@@ -437,12 +448,12 @@ void read_action(int t)
         const int* subStorage = storage_.data() + part_p->start;
 
         int idx = 0;
-        if(!disks[i].last_ok){ // 如果上次没处理完
+        if(!disks[i].last_ok[j]){ // 如果上次没处理完
             if(head >= part_p->start && head < part_p->start + part_p->size){ // 磁头在区间内
                 idx = head - part_p->start; // 从磁头继续处理
             }
         }else{ // 上次处理完了，开始处理新区间
-            disks[i].last_ok = false; // 标记本次处理未完成，且从头开始处理
+            disks[i].last_ok[j] = false; // 标记本次处理未完成，且从头开始处理
         }
 
         bool stop = false; // 磁头无token，stop指示
@@ -451,12 +462,12 @@ void read_action(int t)
             if(object_id == 0) continue; // 该位置没有对象，继续下一个目标
             if(objects[object_id].get_request_num() <= 0) continue; // 该对象没有请求，继续下一个目标 
             // 找到有请求的目标，判断所需要的 行动和token
-            std::pair<int, int> act_token = disks[i].get_need_token_to_head(part_p->start + idx);
-            int dis = disks[i].get_distance_to_head(part_p->start + idx); // 计算距离
+            std::pair<int, int> act_token = disks[i].get_need_token_to_head(part_p->start + idx, j);
+            int dis = disks[i].get_distance_to_head(part_p->start + idx, j); // 计算距离
             
             if(act_token.first == 0){ // read
                 for(int d=0; d<=dis; ++d){
-                    if(disks[i].read()){ // read到指定位置然后再读取
+                    if(disks[i].read(j)){ // read到指定位置然后再读取
                         printf("r"); //read成功，打印read指令
                     }
                     else {
@@ -474,7 +485,7 @@ void read_action(int t)
             }
             else if(act_token.first == 1){ // pass
                 for(int d=0; d<dis; ++d){
-                    if(disks[i].pass()){ // pass到指定位置
+                    if(disks[i].pass(j)){ // pass到指定位置
                         printf("p"); //pass成功，打印pass指令
                     }
                     else {
@@ -484,7 +495,7 @@ void read_action(int t)
                     }
                 }
                 if(stop) break;
-                if(disks[i].read()){ // 然后再读取
+                if(disks[i].read(j)){ // 然后再读取
                     printf("r"); //read成功，打印read指令
                     // 成功读取该块，记录读取进度
                     read_update_request_info(i, object_id, part_p->start + idx, finish_requests);
@@ -496,13 +507,13 @@ void read_action(int t)
                 if(stop) break;
             }
             else if(act_token.first == -1){ // jump
-                if(disks[i].jump(part_p->start + idx)){ // jump到指定位置
+                if(disks[i].jump(part_p->start + idx, j)){ // jump到指定位置
                     printf("j %d\n", part_p->start + idx); //jump成功，打印pass指令
                 }
                 stop = true;
             }
             else if (act_token.first == -2){ // read 2jump
-                while(disks[i].read()){ // 尽量读
+                while(disks[i].read(j)){ // 尽量读
                     printf("r"); //read成功，打印read指令
                     int temp_pos = head > 1 ? head-1 : V;
                     // int temp_obj_id = storage_[temp_pos];
@@ -515,14 +526,20 @@ void read_action(int t)
         }
 
         if(stop){
-            i++;
-            continue; // token数量不足，结束该硬盘操作,继续下一个硬盘
+            if(j >= HEAD_NUM){
+                i++;
+                break;
+            }
+            j++;
+            continue; // token数量不足，结束该 磁头 /*硬盘*/操作,继续下一个磁头 /*硬盘*/
         }
 
         if(idx == part_p->size){ // 完成目标块操作
-            disks[i].last_ok = true;
-            disks[i].set_head_free(); // 磁头空闲
+            disks[i].last_ok[j] = true;
+            disks[i].set_head_free(j); // 磁头空闲
+            disks[i].part_p[j]->is_free = true; // 标记分区为空闲
         }
+    }
     }
     // 磁头操作完毕
     // 读取完成，输出读取完成的请求
@@ -530,7 +547,17 @@ void read_action(int t)
     for(const auto & req_id: finish_requests){
         printf("%d\n", req_id);
     }
+    ////
 
+    fflush(stdout);
+}
+void gc_action()
+{
+    scanf("%*s %*s");
+    printf("GARBAGE COLLECTION\n");
+    for (int i = 1; i <= N; i++) {
+        printf("0\n");
+    }
     fflush(stdout);
 }
 
@@ -557,8 +584,12 @@ int main()
         delete_action(t);
         write_action(t);
         read_action(t);
+        
+        if (t % FRE_PER_SLICING == 0) {
+            gc_action();
+        }
 
-        tagmanager.check_tag_partition_sets();
+        // tagmanager.check_tag_partition_sets();
         // if (t > 80000) tagmanager.check_consistency();
    
     }

@@ -3,7 +3,7 @@
 std::vector<Request> requests(MAX_REQUEST_NUM);
 std::vector<Object> objects(MAX_OBJECT_NUM);
 std::vector<Disk> disks;
-int T, M, N, V, G;
+int T, M, N, V, G, K;
 // TagManager tagmanager(0, 0);
 std::vector<std::vector<int>> conflict_matrix; // 冲突矩阵
 std::vector<int> tag_conflict_sum; // 从 1 到 M，有 M 行

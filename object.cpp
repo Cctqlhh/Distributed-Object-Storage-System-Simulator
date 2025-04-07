@@ -421,12 +421,12 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
                     int part_id = candidate.second;
                     if (tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id)) continue;  // 该区间块包含该对象标签，跳过
                     if (!can_use(disk_id, part_id)) continue;   // 该区间块不满足条件，跳过
-                    int head_position = disks[disk_id].get_head_position();
-                    int head_part_id = disks[disk_id].get_partition_id(head_position);
-                    // 先不选磁头后面的区间块
-                    if (head_mode == 0) {
-                        if (part_id <= head_part_id) continue;
-                    }
+                    // // 优先选磁头后面的区间块
+                    // int head_position = disks[disk_id].get_head_position();
+                    // int head_part_id = disks[disk_id].get_partition_id(head_position);
+                    // if (head_mode == 0) {
+                    //     if (part_id <= head_part_id) continue;
+                    // }
                     const auto& tags = tag_manager.disk_partition_usage_tagkind[disk_id][part_id];
                     // if ((int)tags.size() != expected_tag_count) continue;   
                     // 不是当前标签数量的区间块，跳过 
@@ -995,11 +995,12 @@ std::vector<std::pair<int, int>> Object::select_storage_partitions(
         if (head_mode == 0 && !current_is_read ) continue;
         for (const auto& [disk_id, parts] : tag_manager.tag_disk_partition[tag_id]) {
             for (int part_id : parts) {
-                int head_position = disks[disk_id].get_head_position();
-                int head_part_id = disks[disk_id].get_partition_id(head_position);
-                if (head_mode == 0) {
-                    if (part_id <= head_part_id) continue;
-                }
+                // // 优先选磁头后面的区间块
+                // int head_position = disks[disk_id].get_head_position();
+                // int head_part_id = disks[disk_id].get_partition_id(head_position);
+                // if (head_mode == 0) {
+                //     if (part_id <= head_part_id) continue;
+                // }
                 // 该硬盘未被选过，该硬盘该区间块有该标签，该区间块容量满足要求
                 if (!used_disks.count(disk_id) &&                                                   
                     tag_manager.disk_partition_usage_tagkind[disk_id][part_id].count(tag_id) &&    

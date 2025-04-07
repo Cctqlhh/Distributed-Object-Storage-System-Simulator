@@ -10,6 +10,7 @@ std::vector<int> tag_conflict_sum; // 从 1 到 M，有 M 行
 TagManager tagmanager(0, 0, 0);
 std::vector<std::vector<int>> write_conflict_matrix; // 写冲突矩阵
 std::vector<std::vector<int>> read_matrix; // 读取矩阵
+std::vector<std::vector<int>> request_no; 
 
 int current_max_request_id = 0; // 记录目前已处理的最大请求id
 
@@ -22,6 +23,8 @@ void preprocess() {
     tagmanager = TagManager(M, N, slicing_count);
     // 数据接收
     // 存储时间片删除、写入、读取的数据
+    
+    request_no.resize(T + EXTRA_TIME + 1);
     std::vector<std::vector<int>> fre_del(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> fre_write(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> fre_read(M + 1, std::vector<int>(slicing_count + 1, 0));
@@ -212,6 +215,7 @@ void delete_action(int t)
             std::vector<int>& partition_object = disks[disk_id].get_partition_info(partition_id).partition_object;
             for (size_t i = 0; i < partition_object.size(); ++i) {
                 if (partition_object[i] == partition_id) {
+                // if (partition_object[i] == id) {
                     // 采用交换删除法：将该元素与最后一个元素交换，再弹出最后一个元素
                     partition_object[i] = partition_object.back();
                     partition_object.pop_back();
@@ -292,12 +296,15 @@ void write_action(int t)
 
 void read_update_request_info(int disk_id, int object_id, int unit_pos, std::vector<int>& finish_requests){
     if(object_id == 0) return;
+    if(objects[object_id].is_deleted_status()) return;
     // 确定是目标的哪一块
     int block_idx = objects[object_id].get_which_unit(disk_id, unit_pos);
     auto& active_reqs = objects[object_id].get_active_requests();
     for(size_t i=0; i<active_reqs.size();){
         int req_id = active_reqs[i];
-        if(requests[req_id].is_up){
+        if(requests[req_id].is_up || requests[req_id].is_completed()){
+            active_reqs[i] = active_reqs.back();
+            active_reqs.pop_back();
             ++i;
             continue;
         }
@@ -313,6 +320,7 @@ void read_update_request_info(int disk_id, int object_id, int unit_pos, std::vec
     }
 }
 
+
 void read_action(int t)
 {
 // 获取读取请求
@@ -320,6 +328,7 @@ void read_action(int t)
     int request_id, object_id; 
     std::vector<int> finish_requests;
     scanf("%d", &n_read); // 要读的请求个数，读取几个对象
+    // std::cerr<<"n_read 0"<<std::endl;
     // 添加新请求
     for (int i = 1; i <= n_read; i++) { // 可以在请求进来的时候 给硬盘分区记录 !请求变化!,新增请求和删除的请求id,然后在需要更新的时候按这个更新
         scanf("%d%d", &request_id, &object_id); // 请求id,对象id
@@ -327,9 +336,13 @@ void read_action(int t)
         requests[request_id].link_to_previous(objects[object_id].get_last_request()); // 请求链表链接
         objects[object_id].update_last_request(request_id); // 更新对象最后新增的请求 不影响读取，只方便删除
         objects[object_id].add_active_request(request_id); // 添加到活跃请求列表
+        // std::cerr<<"n_read 1"<<std::endl;
+        request_no[t + EXTRA_TIME].push_back(request_id);
+        // std::cerr<<"n_read 2"<<std::endl;
         if (request_id > current_max_request_id)
             current_max_request_id = request_id;
     }
+    
 
     // 每个磁头寻找要读的对象进行读操作  
     for(int i=1; i<=N;){
@@ -338,6 +351,7 @@ void read_action(int t)
         // assert(i <= N && i >= 1);
         // 维护已有请求 应当磁头空闲时候进行维护
         
+        // std::cerr<<"disk "<<i<<" head " << j <<std::endl;
         int head = disks[i].get_head_position(j);
         if(disks[i].head_is_free(j) && t != disks[i].curr_time){ //磁头空闲，需要设置新的读取对象
             // std::cerr<<"----------------------------------------------"<<std::endl;
@@ -547,7 +561,26 @@ void read_action(int t)
     for(const auto & req_id: finish_requests){
         printf("%d\n", req_id);
     }
+
     ////
+    int n_busy = 0;
+    // int t1 = t < T ? t + 104 : t;
+    int t1 = t;
+    std::vector<int> no_finish_requests;
+    for(int i=0; i< request_no[t1].size(); ++i){
+        if(requests[request_no[t1][i]].is_completed()) continue; // 跳过已经完成的请求
+        if(objects[requests[request_no[t1][i]].get_object_id()].is_deleted_status()) continue; // 跳过已经删除的对象
+        n_busy++;
+        no_finish_requests.push_back(request_no[t1][i]);
+        requests[request_no[t1][i]].mark_as_completed(); // 标记请求完成
+    }
+
+    printf("%d\n", n_busy);
+    for (int i = 0; i < n_busy; i++) {
+        printf("%d\n", no_finish_requests[i]);
+        requests[no_finish_requests[i]].is_up = true; // 标记请求为up
+    }
+
 
     fflush(stdout);
 }

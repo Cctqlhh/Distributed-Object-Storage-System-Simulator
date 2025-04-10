@@ -211,7 +211,7 @@ void delete_action(int t)
             // 从该硬盘该区间块中删除该对象
             std::vector<int>& partition_object = disks[disk_id].get_partition_info(partition_id).partition_object;
             for (size_t i = 0; i < partition_object.size(); ++i) {
-                if (partition_object[i] == partition_id) {
+                if (partition_object[i] == id) {    // 找到该对象
                     // 采用交换删除法：将该元素与最后一个元素交换，再弹出最后一个元素
                     partition_object[i] = partition_object.back();
                     partition_object.pop_back();

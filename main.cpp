@@ -296,7 +296,7 @@ void write_action(int t)
 
 void read_update_request_info(int disk_id, int object_id, int unit_pos, std::vector<int>& finish_requests){
     if(object_id == 0) return;
-    if(objects[object_id].is_deleted_status()) return;
+    if(objects[object_id].is_deleted_status()) return; // 已经删除的对象不再读取
     // 确定是目标的哪一块
     int block_idx = objects[object_id].get_which_unit(disk_id, unit_pos);
     auto& active_reqs = objects[object_id].get_active_requests();
@@ -305,11 +305,12 @@ void read_update_request_info(int disk_id, int object_id, int unit_pos, std::vec
         if(requests[req_id].is_up || requests[req_id].is_completed()){
             active_reqs[i] = active_reqs.back();
             active_reqs.pop_back();
-            ++i;
+            // ++i;
             continue;
         }
         requests[req_id].set_is_done_list(block_idx);
-        if(requests[req_id].is_completed()){
+        // if(requests[req_id].is_completed()){
+        if(requests[req_id].read_done()){
             finish_requests.push_back(req_id);  // 直接追加，无需二分查找
             requests[req_id].is_up = true;
             active_reqs[i] = active_reqs.back();
@@ -483,6 +484,7 @@ void read_action(int t)
                 for(int d=0; d<=dis; ++d){
                     if(disks[i].read(j)){ // read到指定位置然后再读取
                         printf("r"); //read成功，打印read指令
+                        // read_update_request_info(i, object_id, part_p->start + idx, finish_requests);
                     }
                     else {
                         printf("#\n"); //token数量不足，read失败，打印#指令，退出循环
@@ -531,7 +533,7 @@ void read_action(int t)
                     printf("r"); //read成功，打印read指令
                     int temp_pos = head > 1 ? head-1 : V;
                     // int temp_obj_id = storage_[temp_pos];
-                    read_update_request_info(i, storage_[temp_pos], temp_pos, finish_requests);
+                    // read_update_request_info(i, storage_[temp_pos], temp_pos, finish_requests);
                 }
                 printf("#\n"); //token数量不足，read失败，打印#指令
                 stop = true;

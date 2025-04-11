@@ -10,6 +10,7 @@ private:
     int object_id;
     int prev_request_id;
     bool is_done;
+    bool is_read_done;
     int timestamp;
     double time_score;
     double size_score;
@@ -36,4 +37,7 @@ public:
     double get_score(double t) const;
     
     void set_is_done_list(int block_idx);
+    bool read_done(){
+        return is_read_done;
+    }
 };

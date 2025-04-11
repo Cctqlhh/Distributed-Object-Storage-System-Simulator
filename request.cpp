@@ -5,6 +5,7 @@ Request::Request(int req_id, int obj_id, int time,int size)
     , object_id(obj_id)
     , prev_request_id(0)
     , is_done(false)
+    , is_read_done(false)
     , timestamp(time)
     , time_score(TIME_K * time)
     , size_score(0.5 * (size + 1))
@@ -100,6 +101,7 @@ void Request::set_is_done_list(int block_idx){
     //         mark_as_completed();
     //     }
     // }
+    block_idx--;
     int bitmap_idx = block_idx / 64;
     int bit_pos = block_idx % 64;
     uint64_t mask = 1ULL << bit_pos;
@@ -108,6 +110,7 @@ void Request::set_is_done_list(int block_idx){
         is_done_bitmap[bitmap_idx] |= mask;
         rest--;
         if(rest == 0){
+            is_read_done = true;
             mark_as_completed();
         }
     }

@@ -4,6 +4,8 @@ std::vector<Request> requests(MAX_REQUEST_NUM);
 std::vector<Object> objects(MAX_OBJECT_NUM);
 std::vector<Disk> disks;
 int T, M, N, V, G, K;
+// int T, M, N, V, K;
+// std::vector<int> g;
 // TagManager tagmanager(0, 0);
 std::vector<std::vector<int>> conflict_matrix; // 冲突矩阵
 std::vector<int> tag_conflict_sum; // 从 1 到 M，有 M 行
@@ -29,6 +31,9 @@ void preprocess() {
     std::vector<std::vector<int>> fre_write(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> fre_read(M + 1, std::vector<int>(slicing_count + 1, 0));
     std::vector<std::vector<int>> sum(M + 1, std::vector<int>(slicing_count + 1, 0)); // 对象累积总大小
+    std::vector<int> g(ceil((T+105.0) / 1800.0) + 1, 0);
+    // g.resize(ceil((T+105) / 1800) + 1, 0);
+
     // std::vector<std::vector<int>> read_matrix(M + 1, std::vector<int>(slicing_count + 1, 0)); // 读取矩阵
     conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 冲突矩阵
     write_conflict_matrix.resize(M + 1, std::vector<int>(M + 1, 0)); // 写冲突矩阵
@@ -60,6 +65,9 @@ void preprocess() {
         }
     }
 
+    for(int i = 1; i < g.size(); i++){
+        scanf("%d", &g[i]);
+    }
     // 数据处理
     // 计算 sum（对象累积总大小）
     for (int i = 1; i <= M; i++) {
@@ -138,11 +146,13 @@ void preprocess() {
         tag_conflict_sum[i] = sum;  // 从 1 到 M，有 M 行
     }
 
-
+    
     // 初始化磁盘，把硬盘划分为二维区间块   有问题？？？
-    disks.resize(N + 1);    // 磁盘数组 1-N
+    // disks.resize(N + 1);    // 磁盘数组 1-N
+    disks.push_back(Disk(0, 0, 0, g));
     for (int i = 1; i <= N; i++) {
-        disks[i] = Disk(i, V, G);
+        // disks[i] = Disk(i, V, G, g);
+        disks.push_back(Disk(i, V, G, g));
     }
 
     tagmanager.init(sum, conflict_matrix, disks);
@@ -214,8 +224,8 @@ void delete_action(int t)
             // 从该硬盘该区间块中删除该对象
             std::vector<int>& partition_object = disks[disk_id].get_partition_info(partition_id).partition_object;
             for (size_t i = 0; i < partition_object.size(); ++i) {
-                if (partition_object[i] == partition_id) {
-                // if (partition_object[i] == id) {
+                // if (partition_object[i] == partition_id) {
+                if (partition_object[i] == id) {
                     // 采用交换删除法：将该元素与最后一个元素交换，再弹出最后一个元素
                     partition_object[i] = partition_object.back();
                     partition_object.pop_back();
@@ -329,6 +339,10 @@ void read_action(int t)
     int request_id, object_id; 
     std::vector<int> finish_requests;
     scanf("%d", &n_read); // 要读的请求个数，读取几个对象
+    
+    int n_busy = 0;
+    std::vector<int> no_finish_requests;
+
     // std::cerr<<"n_read 0"<<std::endl;
     // 添加新请求
     for (int i = 1; i <= n_read; i++) { // 可以在请求进来的时候 给硬盘分区记录 !请求变化!,新增请求和删除的请求id,然后在需要更新的时候按这个更新
@@ -338,7 +352,8 @@ void read_action(int t)
         objects[object_id].update_last_request(request_id); // 更新对象最后新增的请求 不影响读取，只方便删除
         objects[object_id].add_active_request(request_id); // 添加到活跃请求列表
         // std::cerr<<"n_read 1"<<std::endl;
-        request_no[t + EXTRA_TIME].push_back(request_id);
+        // request_no[t + EXTRA_TIME].push_back(request_id);
+        request_no[t + 10].push_back(request_id);
         // std::cerr<<"n_read 2"<<std::endl;
         if (request_id > current_max_request_id)
             current_max_request_id = request_id;
@@ -347,8 +362,9 @@ void read_action(int t)
 
     // 每个磁头寻找要读的对象进行读操作  
     for(int i=1; i<=N;){
+        bool next_disk = false;
     for(int j=1; j<=HEAD_NUM;){
-
+        
         // assert(i <= N && i >= 1);
         // 维护已有请求 应当磁头空闲时候进行维护
         
@@ -359,6 +375,7 @@ void read_action(int t)
             // std::cerr<<"disk "<<i<<" head is free"<<std::endl;
             disks[i].reflash_partition_score(); // 刷新分数,以便重新写入
             disks[i].curr_time = t;
+            disks[i].pop_num = 12; // 需要弹出剩余总量
             bool has_request = false;
             // // 遍历硬盘所有分区对应的所有对象 请求
             // // 遍历硬盘有请求的分区
@@ -404,13 +421,18 @@ void read_action(int t)
                 // std::cerr << "disk " << i << " partition " << partition_id << " score " << score << std::endl;
                 if(!has_request && score > 0) has_request = true;
                 disks[i].update_partition_info(partition_id, score); // 更新分区得分,同时更新
+                // if(score > 0){
+                //     std::cerr << "time " << t << std::endl;
+                //     std::cerr << "disk " << i << " partition " << partition_id << " score " << score << std::endl;
+                // }
             }
             if(!has_request) {
                 // std::cerr << "disk " << i << " head not has request" << std::endl;
                 for(;j<=HEAD_NUM;++j){
                     printf("#\n"); // 当前硬盘无请求，不操作
                 }
-                i++;
+                // i++;
+                next_disk = true;
                 // continue; // 下一个硬盘
                 break;
             }
@@ -430,6 +452,7 @@ void read_action(int t)
             part_p = disks[i].part_p[j]; // 继续上次区间
         }else{ // 上次读完了
             part_p = disks[i].get_pop_partition(); // 获取最高分区
+            disks[i].pop_num--;
             // 优化：如果最高分区分数为0，直接处理下一个磁盘
             if(part_p->score <= 0){
                 // std::cerr<<"-------------------------------------------"<<std::endl;
@@ -438,7 +461,8 @@ void read_action(int t)
                     disks[i].set_head_free(j);
                     printf("#\n"); // 当前硬盘无请求，不操作
                 }
-                i++;
+                // i++;
+                next_disk = true;
                 // continue;
                 break;
             }
@@ -477,7 +501,7 @@ void read_action(int t)
             if(object_id == 0) continue; // 该位置没有对象，继续下一个目标
             if(objects[object_id].get_request_num() <= 0) continue; // 该对象没有请求，继续下一个目标 
             // 找到有请求的目标，判断所需要的 行动和token
-            std::pair<int, int> act_token = disks[i].get_need_token_to_head(part_p->start + idx, j);
+            std::pair<int, int> act_token = disks[i].get_need_token_to_head(part_p->start + idx, j, t);
             int dis = disks[i].get_distance_to_head(part_p->start + idx, j); // 计算距离
             
             if(act_token.first == 0){ // read
@@ -523,7 +547,7 @@ void read_action(int t)
                 if(stop) break;
             }
             else if(act_token.first == -1){ // jump
-                if(disks[i].jump(part_p->start + idx, j)){ // jump到指定位置
+                if(disks[i].jump(part_p->start + idx, j, t)){ // jump到指定位置
                     printf("j %d\n", part_p->start + idx); //jump成功，打印pass指令
                 }
                 stop = true;
@@ -543,7 +567,8 @@ void read_action(int t)
 
         if(stop){
             if(j >= HEAD_NUM){
-                i++;
+                // i++;
+                next_disk = true;
                 break;
             }
             j++;
@@ -556,7 +581,61 @@ void read_action(int t)
             disks[i].part_p[j]->is_free = true; // 标记分区为空闲
         }
     }
+        if(next_disk) {
+            i++;
+            continue;
+        }
+        while(disks[i].pop_num--){
+            
+            auto temp_part = disks[i].get_pop_partition();
+            if(temp_part->score <= 0) break;
+            const std::vector<int>& storage_ = disks[i].get_storage();
+            const int* subStorage = storage_.data() + temp_part->start;
+            for(int idx=0; idx < temp_part->size; ++idx){
+                int object_id = subStorage[idx];
+                if(object_id == 0) continue; // 该位置没有对象，继续下一个目标
+                if(objects[object_id].get_request_num() <= 0) continue; // 该对象没有请求，继续下一个目标 
+                if(objects[object_id].danger) objects[object_id].danger--;
+            }
+        }
+        
+        if(disks[i].pop_num <= 0){
+            int n = 8;
+            while(n--){
+                auto temp_part = disks[i].get_pop_partition();
+                if(temp_part->score <= 0) break; // 无请求，不需要处理
+                if(temp_part->score <= 0.1){ // 如果小于阈值，则进行繁忙处理
+                    const std::vector<int>& storage_ = disks[i].get_storage();
+                    const int* subStorage = storage_.data() + temp_part->start;
+                    for(int idx=0; idx < temp_part->size; ++idx){
+                        int object_id = subStorage[idx];
+                        if(object_id == 0) continue; // 该位置没有对象，继续下一个目标
+                        if(objects[object_id].get_request_num() <= 0) continue; // 该对象没有请求，继续下一个目标 
+                        objects[object_id].danger++;
+                        if(objects[object_id].danger >= 3){
+                            auto& active_reqs = objects[object_id].get_active_requests();
+                            for(size_t i=0; i<active_reqs.size();){
+                                int req_id = active_reqs[i];
+                                if(requests[req_id].is_up || requests[req_id].is_completed()){
+                                    active_reqs[i] = active_reqs.back();
+                                    active_reqs.pop_back();
+                                    continue;
+                                }
+                                else{
+                                    no_finish_requests.push_back(req_id);
+                                    requests[req_id].mark_as_completed(); // 标记请求完成
+                                    requests[req_id].is_up = true;
+                                    active_reqs[i] = active_reqs.back();
+                                    active_reqs.pop_back();
+                                }
+                            }
+                        }
+                    }
+                }        
+            }
+        }
     }
+
     // 磁头操作完毕
     // 读取完成，输出读取完成的请求
     printf("%d\n", finish_requests.size());
@@ -565,10 +644,8 @@ void read_action(int t)
     }
 
     ////
-    int n_busy = 0;
     // int t1 = t < T ? t + 104 : t;
     int t1 = t;
-    std::vector<int> no_finish_requests;
     for(int i=0; i< request_no[t1].size(); ++i){
         if(requests[request_no[t1][i]].is_completed()) continue; // 跳过已经完成的请求
         if(objects[requests[request_no[t1][i]].get_object_id()].is_deleted_status()) continue; // 跳过已经删除的对象
@@ -613,7 +690,7 @@ int main()
 
         // token_manager->refresh();
         for (int i=1; i<=N; i++) {
-            disks[i].refresh_token_manager();
+            disks[i].refresh_token_manager(t);
         }
         timestamp_action();
         delete_action(t);

@@ -1,15 +1,16 @@
 #include "disk.h"
 
 
-Disk::Disk(int disk_id, int disk_capacity, int max_tokens) 
+Disk::Disk(int disk_id, int disk_capacity, int max_tokens, std::vector<int> ex_tokens) 
     : id(disk_id)
     , capacity(disk_capacity)
     // , head_position(1)
     , head_position(HEAD_NUM + 1, 1)
     , storage(disk_capacity + 1, 0)
     , max_tokens_(max_tokens) 
+    , ex_tokens_(ex_tokens)
     , partition_size(std::ceil(static_cast<double>(disk_capacity) / DISK_PARTITIONS))
-    , token_manager(max_tokens)
+    , token_manager(max_tokens, ex_tokens)
     // , head_free(true)
     , head_free(HEAD_NUM + 1, true)
     // , part_p(nullptr)
@@ -90,12 +91,12 @@ Disk::Disk(int disk_id, int disk_capacity, int max_tokens)
 // }
 
 
-std::pair<int,int> Disk::get_need_token_to_head(int position, int i) const {
+std::pair<int,int> Disk::get_need_token_to_head(int position, int i, int t) const {
     assert(position > 0 && position <= capacity);
     // int distance = get_distance_to_head(position);
     int read_cost = get_need_token_continue_read(position, i);
     int pass_cost = get_need_token_continue_pass(position, i);
-    int cur_rest_tokens = token_manager.get_current_tokens();
+    int cur_rest_tokens = token_manager.get_current_tokens(i);
     int cost;
     int action;
     if(read_cost <= pass_cost){
@@ -107,13 +108,15 @@ std::pair<int,int> Disk::get_need_token_to_head(int position, int i) const {
         action = 1;
     }
     // 如果是初始阶段 可选择jump
-    if(cur_rest_tokens == max_tokens_){
-        if(cost < max_tokens_) return {action, cost};
-        return {-1, max_tokens_};
+    // int tt = (t - 1) / FRE_PER_SLICING + 1;
+    int tt = ceil(t/1800.0);
+    if(cur_rest_tokens == max_tokens_ + ex_tokens_[tt]){
+        if(cost < max_tokens_ + ex_tokens_[tt]) return {action, cost};
+        return {-1, max_tokens_ + ex_tokens_[tt]};
     }
     // 如果是中间阶段，不能jump，且过不去，只能jump，那就先尽量随便读，然后下次重新算jump
-    if(cost > cur_rest_tokens + max_tokens_){
-        return {-2, max_tokens_ + cur_rest_tokens};
+    if(cost > cur_rest_tokens + max_tokens_ + ex_tokens_[tt]){
+        return {-2, max_tokens_ + ex_tokens_[tt] + cur_rest_tokens};
     }
     return {action, cost};
 }
@@ -143,19 +146,19 @@ int Disk::get_need_token_continue_pass(int position, int i) const{
     return cost;
 }
 
-void Disk::refresh_token_manager(){
-    token_manager.refresh();
+void Disk::refresh_token_manager(int t){
+    token_manager.refresh(t);
 }
 
-int Disk::jump(int position, int i){
-    if(token_manager.consume_jump()){
+int Disk::jump(int position, int i, int t){
+    if(token_manager.consume_jump(t, i)){
         head_position[i] = position;
         return head_position[i];
     } else 
         return 0;
 }
 int Disk::pass(int i){
-    if(token_manager.consume_pass()){
+    if(token_manager.consume_pass(i)){
         head_position[i] += 1;
         if(head_position[i] > capacity)
             head_position[i] = 1;
@@ -164,7 +167,7 @@ int Disk::pass(int i){
     else return 0;
 }
 int Disk::read(int i){
-    if(token_manager.consume_read()){
+    if(token_manager.consume_read(i)){
         head_position[i] += 1;
         if(head_position[i] > capacity)
             head_position[i] = 1;

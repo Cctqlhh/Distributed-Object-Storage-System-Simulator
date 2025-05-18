@@ -27,6 +27,9 @@ private:
 
 public:
     Object(int id = 0, int size = 0, int tag_id = 0);
+
+    int danger;
+
     // 写入一个副本，修改自身存储数据，硬盘存储数据，区间块大小减少。
 //     bool write_replica(int replica_idx, Disk& disk);
     bool write_replica(int replica_idx, Disk& disk, int start_pos, int end_pos);

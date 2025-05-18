@@ -14,12 +14,14 @@ struct PartitionInfo {
     // std::vector<int> need_read;  // 该区间块的每个存储单元是否需要读，需要读取的次数
     // std::vector<int> object_ids;    // 该区间块存储的所有对象id
     
+    int low_choose; //
+
     // 每个区间块的对象id
     std::vector<int> partition_object;
 
-    PartitionInfo() : start(0), size(0), score(0), head_position(1), is_free(true) {}  // 默认构造函数
+    PartitionInfo() : start(0), size(0), score(0), head_position(1), is_free(true), low_choose(0) {}  // 默认构造函数
     // PartitionInfo(int s, int sz) : start(s), size(sz), score(0), need_read(sz, 0) {}  // 带参数的构造函数
-    PartitionInfo(int s, int sz) : start(s), size(sz), score(0), head_position(1), is_free(true) {}  // 带参数的构造函数
+    PartitionInfo(int s, int sz) : start(s), size(sz), score(0), head_position(1), is_free(true), low_choose(0) {}  // 带参数的构造函数
     
     int get_distance_to_head(int position) const // 返回目标位置到磁头的距离（存储单元数（对象块数））== pass token消耗
     {
@@ -168,6 +170,8 @@ private:
     // bool head_free;          // 磁头状态
     
     int max_tokens_;
+    // std::vector<int> max_tokens_;
+    std::vector<int> ex_tokens_;
     int partition_size;        // 每个分区的大小(一般)
 
     std::vector<int> storage_partition_map;  // 存储单元所属的分区映射（索引 1~capacity）
@@ -189,10 +193,14 @@ public:
     // std::vector<const PartitionInfo*> part_p;
     std::vector<PartitionInfo*> part_p;
     int curr_time; // 记录最后一次刷新分数的时间
+    int pop_num;
     std::vector<bool> last_ok;
     // bool last_ok;
-    Disk() : id(0), capacity(0), head_position(HEAD_NUM+1, 1), max_tokens_(0), token_manager(0), curr_time(0) {}  // 添加默认构造函数
-    Disk(int id, int capacity, int max_tokens);
+    // Disk() : id(0), capacity(0), head_position(HEAD_NUM+1, 1), max_tokens_(0), ex_tokens_(std::vector<int>(0)), token_manager(0, std::vector<int>(0)), curr_time(0) {}  // 添加默认构造函数
+    // Disk() : id(0), capacity(0), head_position(HEAD_NUM+1, 1), max_tokens_(0), ex_tokens_(std::vector<int>()), token_manager(0, std::vector<int>()), curr_time(0) {}  // 添加默认构造函数
+
+    // Disk(int id, int capacity, int max_tokens);
+    Disk(int id, int capacity, int max_tokens, std::vector<int> ex_tokens);
 
 
     bool write(int position, int object_id) {
@@ -225,14 +233,14 @@ public:
             return capacity - head_position[i] + position;
         else return position - head_position[i];
     }
-    std::pair<int, int> get_need_token_to_head(int position, int i) const; // 返回到达目标的最优操作和token消耗。1-pass,0-read,-1-jump,-2-next-jump.
+    std::pair<int, int> get_need_token_to_head(int position, int i, int t) const; // 返回到达目标的最优操作和token消耗。1-pass,0-read,-1-jump,-2-next-jump.
 
     int get_need_token_continue_read(int position, int i) const; // 返回到达目标连续read时token消耗(包含到达后的读取)
     int get_need_token_continue_pass(int position, int i) const; // 返回到达目标连续pass时token消耗(包含到达后的读取)
-    void refresh_token_manager();
+    void refresh_token_manager(int t);
 
     // head操作，更新head位置并返回，同时更新token
-    int jump(int position, int i); 
+    int jump(int position, int i, int t); 
     int pass(int i);
     int read(int i);
     
@@ -281,8 +289,8 @@ public:
     PartitionInfo* get_pop_partition();
     void push_partition(PartitionInfo* partition);
 
-    int get_cur_tokens() const{
-        return token_manager.get_current_tokens();
+    int get_cur_tokens(int i) const{
+        return token_manager.get_current_tokens(i);
     }
 
     int get_partition_start(int partition_id) const{

@@ -42,6 +42,7 @@ extern std::vector<Request> requests;
 extern std::vector<Object> objects;
 extern std::vector<Disk> disks;
 extern int T, M, N, V, G, K;
+// extern int T, M, N, V, K;
 extern TagManager tagmanager;
 extern std::vector<std::vector<int>> conflict_matrix;       // 冲突矩阵
 extern std::vector<int> tag_conflict_sum;                   // 从 1 到 M，有 M 行

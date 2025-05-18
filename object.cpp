@@ -12,7 +12,8 @@ Object::Object(int id, int size, int tag_id)
     , partition_id(REP_NUM + 1)
     , request_num(0)
     , is_continue(REP_NUM + 1) 
-    , current_is_read(false) {}
+    , current_is_read(false)
+    , danger(0) {}
     
 
 // // 写策略1：采用散写策略

@@ -1,8 +1,5 @@
 #pragma once
 #include "global.h"
-// #include <cmath>
-// #include <vector>
-// #include <iostream>
 
 class TokenManager {
 private:

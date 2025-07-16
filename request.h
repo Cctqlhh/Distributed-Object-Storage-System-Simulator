@@ -11,8 +11,8 @@ private:
     int prev_request_id;
     bool is_done;
     int timestamp;
-    float time_score;
-    float size_score;
+    double time_score;
+    double size_score;
 
     // std::vector<bool> is_done_list;
     std::vector<uint64_t> is_done_bitmap; // 使用位图替代布尔数组
@@ -29,10 +29,11 @@ public:
     int get_prev_id() const;
     void set_object_id(int id);
 
-    float compute_time_score_update(int t) const;
-    float get_size_score() const;
-    float get_time_score() const;
-    float get_score(int t) const;
+    double compute_time_score_update(int t) const;
+    double get_size_score() const;
+    double get_time_score() const;
+    double get_delete_prob(int t) const;
+    double get_score(double t) const;
     
     void set_is_done_list(int block_idx);
 };

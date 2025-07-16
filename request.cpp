@@ -39,22 +39,57 @@ void Request::set_object_id(int id) {
     object_id = id;
 }
 
-float Request::compute_time_score_update(int t) const {
-    if(is_done || is_up) return 0.0f;
-    int time_ = t - timestamp;
-    return (time_ <= 10) ? (1.0f - 0.005f * time_) : 
-           (time_ <= 105) ? (1.05f - 0.01f * time_) : 0.0f;
+double Request::compute_time_score_update(int t) const {
+    // if(is_done || is_up) return 0.0f;
+    unsigned int time_ = t - timestamp;
+    return (time_ <= 10) ? (1.0 - 0.005 * time_) : 
+           (time_ <= 105) ? (1.05 - 0.01 * time_) : 0.0;
+    // return (time_ <= 105)? (1 + time_) : 0.0;
+    // return (time_ <= 105)? (1 + time_) : 0.0;
 }
 
-float Request::get_size_score() const{
+double Request::get_size_score() const{
     return size_score;
 }
-float Request::get_time_score() const{
+double Request::get_time_score() const{
     return time_score;
 }
-float Request::get_score(int t) const{
-    float score = compute_time_score_update(t);
-    return score * size_score;
+double Request::get_delete_prob(int t) const{
+    return tagmanager.tag_delete_prob[objects[object_id].get_tag_id()][(t - 1) / FRE_PER_SLICING + 1];
+}
+
+double Request::get_score(double t) const{
+    double score = compute_time_score_update(t);
+    // return score * size_score * (1 - get_delete_prob(t));
+    // double score = t > timestamp + 105 ? 0.0 : (1.0 - (t - timestamp) / 105.0);
+    // double score = t > timestamp + 105? 0.0 : (t - timestamp + 1);
+    double time_over = t - timestamp <= 105 ? (t - timestamp) : 0.0;
+    return (0.3 * score + 0.7 * time_over / 105) * size_score / 5;
+    // return time_score * size_score;
+
+    // 1. 计算时间得分（double 精度）
+    // 2. 计算对象大小得分
+    double time_size_score = compute_time_score_update(t) * size_score;
+    // return time_size_score;
+    // 3. 计算不被删除的概率，添加极小值保护（避免 log(0) 或 0 乘积）
+    double not_del = std::max(1e-9, 1.0 - get_delete_prob(t));
+
+    // 设置各项权重，可根据实际调试调整（初始均设为 1.0）
+    double weight_time = 1.0;
+    double weight_size = 1.0;
+    double weight_del  = 1.0;
+    // // 使用加权乘积计算最终得分
+    // double final_score = std::pow(time_score, weight_time) *
+    //                      std::pow(size_score, weight_size) *
+    //                      std::pow(not_del,  weight_del);
+    // 如果你担心直接乘可能出现过小数值，也可以选择取对数后加权再指数化：
+    double log_score = weight_time * std::log(std::max(time_score, 1e-9)) +
+                       weight_size * std::log(std::max(size_score, 1e-9)) +
+                       weight_del  * std::log(not_del);
+    double final_score = std::exp(log_score);
+
+    return final_score;
+
 }
 
 void Request::set_is_done_list(int block_idx){

@@ -16,9 +16,6 @@ C、C++的编译：
 cmake .
 make
 
-Java的编译：
-javac main.java
-
 ```
 
 ## 项目内容
@@ -41,6 +38,8 @@ javac main.java
 
 
 ## 工作内容
+
+zread总结：https://zread.ai/Cctqlhh/code_craft2025/1-overview
 
 **（1）系统架构设计**
 
